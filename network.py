@@ -1,12 +1,10 @@
 import torch
 import torch.nn as nn
-import numpy as np
-import math
 from typing import Tuple, Optional
 
 
 class SensorimotorPredictiveNetworkRNN(nn.Module):
-    def __init__(self, associative_size: int, inference_learning_rate: float,
+    def __init__(self, associative_size: int, vestibular_size: int, inference_learning_rate: float,
                  weight_learning_rate: float, n_inference_steps: int):
         """
         Initialize predictive coding network with recurrent associative area for
@@ -17,6 +15,7 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
 
         # Store parameters
         self.associative_size = associative_size
+        self.vestibular_size = vestibular_size
         self.inference_learning_rate = inference_learning_rate
         self.weight_learning_rate = weight_learning_rate
         self.n_inference_steps = n_inference_steps
@@ -25,7 +24,9 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         self.Wrec = self._init_weights(associative_size, associative_size)  # [associative_size, associative_size]
 
         # Initialize prediction weights for sensory pathways
-        self.W_vestibular = self._init_weights(1, associative_size)  # Predict vestibular [1, associative_size]
+        # Initialize prediction weights for sensory pathways
+        self.W_vestibular = self._init_weights(vestibular_size, associative_size)
+        # self.W_vestibular = self._init_weights(1, associative_size)  # Predict vestibular [1, associative_size]
         self.W_beat = self._init_weights(1, associative_size)  # Predict beats [1, associative_size]
 
         # Initialize states
@@ -91,7 +92,7 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
                             beat_input: Optional[torch.Tensor]) -> torch.Tensor:
         """Compute free energy (prediction error)."""
         e_rec, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
-        return 0.5 * (torch.sum(e_rec ** 2) + e_v ** 2 + e_b ** 2)
+        return 0.5 * (torch.sum(e_rec ** 2) + torch.sum(e_v ** 2) + e_b ** 2)
 
     def update_weights(self, e_rec: torch.Tensor, e_v: torch.Tensor, e_b: torch.Tensor):
         """Update weights based on prediction errors."""
@@ -108,7 +109,7 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
     def timestep_train(self, vestibular_input: torch.Tensor,
                        beat_input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Process one training timestep with both inputs available."""
-        vestibular_input = vestibular_input.view(1, 1)
+        vestibular_input = vestibular_input.view(self.vestibular_size, 1)
         beat_input = beat_input.view(1, 1)
 
         # Store current state as previous

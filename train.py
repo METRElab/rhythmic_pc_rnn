@@ -1,13 +1,7 @@
-import sys
-# Now you can import any modules from the added directory
 import argparse
-from pathlib import Path
-
 import numpy as np
 
 from network import SensorimotorPredictiveNetworkRNN
-import copy
-# sys.path.append('/Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/PredictiveCodingBackprop/rhythm_rnn')
 from utils import ExperimentManager, generate_input_sequences
 
 
@@ -34,7 +28,7 @@ def calc_inference_err(network, config):
             vestibular_preds.append(vestibular_pred)
 
             # Accumulate error
-            total_vest_error += (vestibular - vestibular_pred).item() ** 2
+            total_vest_error += ((vestibular - vestibular_pred) ** 2).sum().item()
             total_steps += 1
 
     # Log average inference error
@@ -54,6 +48,7 @@ def train():
     # Create network
     network = SensorimotorPredictiveNetworkRNN(
         associative_size=config['network']['associative_size'],
+        vestibular_size=config['network']['vestibular_size'],
         inference_learning_rate=config['network']['inference_learning_rate'],
         weight_learning_rate=config['network']['weight_learning_rate'],
         n_inference_steps=config['network']['n_inference_steps']
@@ -89,7 +84,7 @@ def train():
             vestibular_pred, beat_pred = network.timestep_train(vestibular, beat)
 
             # Accumulate errors
-            accumulated_vest_error += (vestibular - vestibular_pred).item() ** 2
+            accumulated_vest_error += ((vestibular - vestibular_pred) ** 2).sum().item()
             accumulated_beat_error += (beat - beat_pred).item() ** 2
             steps_since_last_log += 1
 
