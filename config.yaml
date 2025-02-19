@@ -1,5 +1,5 @@
 experiment:
-  dt: 0.1    # simulation timestep
+  dt: 0.05    # simulation timestep
   duration: 10.0  # total duration in seconds
   n_training_rounds: 100
   name: "tempo_learning_exp1"

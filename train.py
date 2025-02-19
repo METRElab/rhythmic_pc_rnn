@@ -11,7 +11,8 @@ def calc_inference_err(network, config):
     test_beat_seq, test_vestibular_seq = generate_input_sequences(
         tempo=config['experiment']['tempo'],
         dt=config['experiment']['dt'],
-        duration=config['testing']['test_duration']
+        duration=config['testing']['test_duration'],
+        vestibular_size=config['network']['vestibular_size']
     )
 
     total_vest_error = 0
@@ -58,7 +59,8 @@ def train():
     beat_seq, vestibular_seq = generate_input_sequences(
         tempo=config['experiment']['tempo'],
         dt=config['experiment']['dt'],
-        duration=config['experiment']['duration']
+        duration=config['experiment']['duration'],
+        vestibular_size=config['network']['vestibular_size']
     )
 
     # Training loop

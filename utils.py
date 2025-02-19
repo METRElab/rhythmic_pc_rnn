@@ -7,7 +7,7 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 
-def generate_input_sequences(tempo, dt, duration):
+def generate_input_sequences(tempo, dt, duration, vestibular_size):
     """
     Generate synchronized beat and vestibular sequences.
 
@@ -59,12 +59,14 @@ def generate_input_sequences(tempo, dt, duration):
     vestibular_sin = np.sin(2 * np.pi * frequency * t)
     vestibular_cos = np.cos(2 * np.pi * frequency * t)
 
-    # Combine into a single array, shape [n_steps, 2]
-    vestibular_sequence = np.stack([vestibular_sin, vestibular_cos], axis=1)
-
+    if vestibular_size == 2:
+        # Combine into a single array, shape [n_steps, 2]
+        vestibular_sequence = np.stack([vestibular_sin, vestibular_cos], axis=1)
+    else:
+        vestibular_sequence = vestibular_cos
     # Convert to torch tensors
     beat_sequence = torch.FloatTensor(beat_sequence)               # shape [n_steps]
-    vestibular_sequence = torch.FloatTensor(vestibular_sequence)   # shape [n_steps, 2]
+    vestibular_sequence = torch.FloatTensor(vestibular_sequence)   # shape [n_steps, vestibular_size]
 
     return beat_sequence, vestibular_sequence
 

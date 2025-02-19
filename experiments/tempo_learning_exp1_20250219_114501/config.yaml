@@ -1,0 +1,18 @@
+experiment:
+  dt: 0.05
+  duration: 10.0
+  n_training_rounds: 100
+  name: tempo_learning_exp1_20250219_114501
+  tempo: 0.5
+network:
+  associative_size: 32
+  inference_learning_rate: 0.1
+  n_inference_steps: 20
+  vestibular_size: 1
+  weight_learning_rate: 0.05
+saving:
+  base_dir: experiments
+  log_every: 10
+testing:
+  n_inference_rounds: 10
+  test_duration: 10.0

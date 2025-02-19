@@ -56,49 +56,75 @@ def plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, save_path_h
         row=1, col=1
     )
 
-    # --- Row 2: Actual Vestibular Movement (2 channels) ---
-    fig.add_trace(
-        go.Scatter(
-            x=t,
-            y=vestibular_seq[:, 0].cpu().numpy(),
-            mode='lines',
-            name='Vestibular sin',
-            line=dict(color='blue')
-        ),
-        row=2, col=1
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=t,
-            y=vestibular_seq[:, 1].cpu().numpy(),
-            mode='lines',
-            name='Vestibular cos',
-            line=dict(color='cyan')
-        ),
-        row=2, col=1
-    )
+    if vestibular_seq.ndim == 2:
+        # --- Row 2: Actual Vestibular Movement (2 channels) ---
+        fig.add_trace(
+            go.Scatter(
+                x=t,
+                y=vestibular_seq[:, 0].cpu().numpy(),
+                mode='lines',
+                name='Vestibular sin',
+                line=dict(color='blue')
+            ),
+            row=2, col=1
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=t,
+                y=vestibular_seq[:, 1].cpu().numpy(),
+                mode='lines',
+                name='Vestibular cos',
+                line=dict(color='cyan')
+            ),
+            row=2, col=1
+        )
 
-    # --- Row 3: Predicted Vestibular Movement (2 channels) ---
-    fig.add_trace(
-        go.Scatter(
-            x=t,
-            y=predicted_seq[:, 0],
-            mode='lines',
-            name='Predicted sin',
-            line=dict(color='green')
-        ),
-        row=3, col=1
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=t,
-            y=predicted_seq[:, 1],
-            mode='lines',
-            name='Predicted cos',
-            line=dict(color='magenta')
-        ),
-        row=3, col=1
-    )
+        # --- Row 3: Predicted Vestibular Movement (2 channels) ---
+        fig.add_trace(
+            go.Scatter(
+                x=t,
+                y=predicted_seq[:, 0],
+                mode='lines',
+                name='Predicted sin',
+                line=dict(color='green')
+            ),
+            row=3, col=1
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=t,
+                y=predicted_seq[:, 1],
+                mode='lines',
+                name='Predicted cos',
+                line=dict(color='magenta')
+            ),
+            row=3, col=1
+        )
+
+    if vestibular_seq.ndim == 1:
+        # --- Row 2: Actual Vestibular Movement (1 channel) ---
+        fig.add_trace(
+            go.Scatter(
+                x=t,
+                y=vestibular_seq.cpu().numpy(),
+                mode='lines',
+                name='Vestibular sin',
+                line=dict(color='blue')
+            ),
+            row=2, col=1
+        )
+
+        # --- Row 3: Predicted Vestibular Movement (1 channel) ---
+        fig.add_trace(
+            go.Scatter(
+                x=t,
+                y=predicted_seq,
+                mode='lines',
+                name='Predicted sin',
+                line=dict(color='green')
+            ),
+            row=3, col=1
+        )
 
     # Add vertical lines at beat times on rows 2 and 3
     beat_times = [i for i, beat in enumerate(beat_seq) if beat.item() > 0]
@@ -160,7 +186,8 @@ def test_saved_model():
     beat_seq, vestibular_seq = generate_input_sequences(
         tempo=config['experiment']['tempo'],
         dt=config['experiment']['dt'],
-        duration=config['testing']['test_duration']
+        duration=config['testing']['test_duration'],
+        vestibular_size=config['network']['vestibular_size']
     )
 
     # Run inference

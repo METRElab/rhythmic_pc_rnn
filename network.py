@@ -21,13 +21,11 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         self.n_inference_steps = n_inference_steps
 
         # Initialize recurrent weights for associative area
-        self.Wrec = self._init_weights(associative_size, associative_size)  # [associative_size, associative_size]
+        self.Wrec = nn.Parameter(self._init_weights(associative_size, associative_size), requires_grad=False)  # [associative_size, associative_size]
 
         # Initialize prediction weights for sensory pathways
-        # Initialize prediction weights for sensory pathways
-        self.W_vestibular = self._init_weights(vestibular_size, associative_size)
-        # self.W_vestibular = self._init_weights(1, associative_size)  # Predict vestibular [1, associative_size]
-        self.W_beat = self._init_weights(1, associative_size)  # Predict beats [1, associative_size]
+        self.W_vestibular = nn.Parameter(self._init_weights(vestibular_size, associative_size), requires_grad=False)
+        self.W_beat = nn.Parameter(self._init_weights(1, associative_size), requires_grad=False)  # [1, associative_size]
 
         # Initialize states
         self.x = torch.zeros(associative_size, 1)  # Current state [associative_size, 1]
@@ -40,6 +38,7 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         
     def _init_weights(self, out_size: int, in_size: int) -> torch.Tensor:
         """Initialize weights with small random values."""
+        torch.manual_seed(111)
         return torch.randn(out_size, in_size) * 0.05
 
     def _tanh_derivative(self, x: torch.Tensor) -> torch.Tensor:
@@ -119,8 +118,6 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         # Optimize states
         for _ in range(self.n_inference_steps):
             self.optimize_states(vestibular_input, beat_input)
-            # dx = self.optimize_states(vestibular_input, beat_input)
-            # self.x -= self.inference_learning_rate * dx
 
         # Compute final errors and update weights
         e_rec, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
@@ -141,8 +138,6 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         # Optimize states using only beat input
         for _ in range(self.n_inference_steps):
             self.optimize_states(None, beat_input)
-            # dx = self.optimize_states(None, beat_input)
-            # self.x -= self.inference_learning_rate * dx
 
         # Return vestibular prediction
         _, vestibular_pred, _ = self.compute_predictions()
