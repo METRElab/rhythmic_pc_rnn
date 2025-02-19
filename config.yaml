@@ -1,0 +1,17 @@
+experiment:
+  dt: 0.1    # simulation timestep
+  duration: 10.0  # total duration in seconds
+  n_training_rounds: 100
+  name: "tempo_learning_exp1"
+  tempo: 0.5  # seconds between beats
+network:
+  associative_size: 32
+  inference_learning_rate: 0.1
+  n_inference_steps: 20
+  weight_learning_rate: 0.05
+saving:
+  base_dir: "experiments"
+  log_every: 10  # steps between logging
+testing:
+  n_inference_rounds: 10  # number of inference rounds during testing
+  test_duration: 10.0      # duration of each test sequence in seconds
