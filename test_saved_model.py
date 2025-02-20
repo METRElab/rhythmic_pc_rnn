@@ -8,7 +8,9 @@ from utils import generate_input_sequences
 import numpy as np
 
 
-def plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, save_path_html, save_path_png=None):
+def plot_inference_sequence(beat_seq, vestibular_seq,
+                            vestibular_predicted_seq, beat_predicted_seq,
+                            save_path_html, save_path_png=None):
     """
     Plot sequences with Plotly in three subplots and
     add vertical lines at beat times for clarity.
@@ -18,8 +20,9 @@ def plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, save_path_h
     beat_seq : torch.Tensor of shape [n_steps]
     vestibular_seq : torch.Tensor of shape [n_steps, 2]
                     (sine + cosine)
-    predicted_seq : np.array or torch.Tensor of shape [n_steps, 2]
+    vestibular_predicted_seq : np.array or torch.Tensor of shape [n_steps, 2]
                     (predicted sine + cosine)
+    beat_predicted_seq : np.array or torch.Tensor of shape [n_steps]
     save_path_html : Path or str
         Where to save the interactive HTML plot.
     save_path_png : Path or str, optional
@@ -29,8 +32,11 @@ def plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, save_path_h
     from plotly.subplots import make_subplots
 
     # Convert predicted_seq to NumPy if it's still a torch.Tensor
-    if hasattr(predicted_seq, 'numpy'):
-        predicted_seq = predicted_seq.numpy()  # shape [n_steps, 2]
+    if hasattr(vestibular_predicted_seq, 'numpy'):
+        vestibular_predicted_seq = vestibular_predicted_seq.numpy()  # shape [n_steps, 2]
+
+    if hasattr(beat_predicted_seq, 'numpy'):
+        beat_predicted_seq = beat_predicted_seq.numpy()  # shape [n_steps]
 
     # Time axis
     n_steps = len(beat_seq)
@@ -38,8 +44,9 @@ def plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, save_path_h
 
     # Create subplots: 3 rows, 1 column
     fig = make_subplots(
-        rows=3, cols=1,
-        subplot_titles=["Beat Sequence", "Actual Vestibular Movement", "Predicted Vestibular Movement"],
+        rows=4, cols=1,
+        subplot_titles=["Beat Sequence", "Predicted Beat",
+                        "Actual Vestibular Movement", "Predicted Vestibular Movement"],
         shared_xaxes=True,  # so x-zoom is shared
         vertical_spacing=0.1
     )
@@ -56,6 +63,18 @@ def plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, save_path_h
         row=1, col=1
     )
 
+    # --- Row 2: Predicted Beat Sequence ---
+    fig.add_trace(
+        go.Scatter(
+            x=t,
+            y=beat_predicted_seq,  # use .cpu() if on GPU
+            mode='lines+markers',
+            name='Predicted Beat',
+            marker=dict(color='purple')
+        ),
+        row=2, col=1
+    )
+
     if vestibular_seq.ndim == 2:
         # --- Row 2: Actual Vestibular Movement (2 channels) ---
         fig.add_trace(
@@ -66,7 +85,7 @@ def plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, save_path_h
                 name='Vestibular sin',
                 line=dict(color='blue')
             ),
-            row=2, col=1
+            row=3, col=1
         )
         fig.add_trace(
             go.Scatter(
@@ -76,29 +95,29 @@ def plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, save_path_h
                 name='Vestibular cos',
                 line=dict(color='cyan')
             ),
-            row=2, col=1
+            row=3, col=1
         )
 
         # --- Row 3: Predicted Vestibular Movement (2 channels) ---
         fig.add_trace(
             go.Scatter(
                 x=t,
-                y=predicted_seq[:, 0],
+                y=vestibular_predicted_seq[:, 0],
                 mode='lines',
                 name='Predicted sin',
                 line=dict(color='green')
             ),
-            row=3, col=1
+            row=4, col=1
         )
         fig.add_trace(
             go.Scatter(
                 x=t,
-                y=predicted_seq[:, 1],
+                y=vestibular_predicted_seq[:, 1],
                 mode='lines',
                 name='Predicted cos',
                 line=dict(color='magenta')
             ),
-            row=3, col=1
+            row=4, col=1
         )
 
     if vestibular_seq.ndim == 1:
@@ -111,28 +130,29 @@ def plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, save_path_h
                 name='Vestibular sin',
                 line=dict(color='blue')
             ),
-            row=2, col=1
+            row=3, col=1
         )
 
         # --- Row 3: Predicted Vestibular Movement (1 channel) ---
         fig.add_trace(
             go.Scatter(
                 x=t,
-                y=predicted_seq,
+                y=vestibular_predicted_seq,
                 mode='lines',
                 name='Predicted sin',
-                line=dict(color='green')
+                line=dict(color='magenta')
             ),
-            row=3, col=1
+            row=4, col=1
         )
 
-    # Add vertical lines at beat times on rows 2 and 3
+    # Add vertical lines at beat times on rows 2, 3, and 4
     beat_times = [i for i, beat in enumerate(beat_seq) if beat.item() > 0]
     for b in beat_times:
         # add_vline row argument is the *domain* row index, not the subplot index
         # but Plotly 5+ allows `row` and `col` in add_vline:
         fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=2, col=1)
         fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=3, col=1)
+        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=4, col=1)
 
     # Layout settings
     fig.update_layout(
@@ -192,20 +212,25 @@ def test_saved_model():
 
     # Run inference
     network.reset_states()
-    predicted_seq = []
+    vestibular_predicted_seq = []
+    beat_predicted_seq = []
 
     for beat in beat_seq:
-        vestibular_pred = network.timestep_inference(beat)
-        predicted_seq.append(vestibular_pred.squeeze().tolist())
+        vestibular_pred, beat_pred = network.timestep_inference(beat)
+        vestibular_predicted_seq.append(vestibular_pred.squeeze().tolist())
+        beat_predicted_seq.append(beat_pred.squeeze().tolist())
 
         # predicted_seq.append(vestibular_pred.item())
-    predicted_seq = np.array(predicted_seq)
+    vestibular_predicted_seq = np.array(vestibular_predicted_seq)
+    beat_predicted_seq = np.array(beat_predicted_seq)
 
     # Plot and save results
     # plot_path = plots_dir / f'inference_plot_step_{args.model_step}.png'
     plot_path_html = plots_dir / f'inference_plot_step_{args.model_step}.html'
     plot_path_png = plots_dir / f'inference_plot_step_{args.model_step}.png'
-    plot_inference_sequence(beat_seq, vestibular_seq, predicted_seq, plot_path_html, plot_path_png)
+    plot_inference_sequence(beat_seq, vestibular_seq,
+                            vestibular_predicted_seq, beat_predicted_seq,
+                            plot_path_html, plot_path_png)
 
     print(f"Generated plot saved at: {plots_dir}")
 

@@ -6,10 +6,10 @@ experiment:
   tempo: 0.5  # seconds between beats
 network:
   associative_size: 32
-  inference_learning_rate: 0.1
+  inference_learning_rate: 0.05
   n_inference_steps: 20
   vestibular_size: 2
-  weight_learning_rate: 0.05
+  weight_learning_rate: 0.01
 saving:
   base_dir: "experiments"
   log_every: 10  # steps between logging

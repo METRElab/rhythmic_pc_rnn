@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any
+
+from torch import Tensor
 
 
 class SensorimotorPredictiveNetworkRNN(nn.Module):
@@ -127,7 +129,7 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         _, vestibular_pred, beat_pred = self.compute_predictions()
         return vestibular_pred, beat_pred
 
-    def timestep_inference(self, beat_input: torch.Tensor) -> torch.Tensor:
+    def timestep_inference(self, beat_input: torch.Tensor) -> tuple[Tensor | Any, Tensor | Any]:
         """Process one inference timestep with only beat input."""
         beat_input = beat_input.view(1, 1)
 
@@ -135,10 +137,14 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         self.x_prev = self.x.clone()
         self.x = self.Wrec @ torch.tanh(self.x_prev)
 
+        # compute predicted beat before optimizing states
+        _, vestibular_pred, beat_pred = self.compute_predictions()
+
         # Optimize states using only beat input
         for _ in range(self.n_inference_steps):
             self.optimize_states(None, beat_input)
 
         # Return vestibular prediction
-        _, vestibular_pred, _ = self.compute_predictions()
-        return vestibular_pred
+        _, _, _ = self.compute_predictions()
+
+        return vestibular_pred, beat_pred

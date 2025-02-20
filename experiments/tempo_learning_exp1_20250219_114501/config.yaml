@@ -15,4 +15,4 @@ saving:
   log_every: 10
 testing:
   n_inference_rounds: 10
-  test_duration: 10.0
+  test_duration: 20.0
