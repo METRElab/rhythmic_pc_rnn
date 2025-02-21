@@ -25,7 +25,7 @@ def calc_inference_err(network, config):
 
         for beat, vestibular in zip(test_beat_seq, test_vestibular_seq):
             # Run inference with only beat input
-            vestibular_pred, _ = network.timestep_inference(beat)
+            vestibular_pred, _, _, _ = network.timestep_inference(beat)
             vestibular_preds.append(vestibular_pred)
 
             # Accumulate error

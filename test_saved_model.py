@@ -8,8 +8,9 @@ from utils import generate_input_sequences
 import numpy as np
 
 
-def plot_inference_sequence(beat_seq, vestibular_seq,
-                            vestibular_predicted_seq, beat_predicted_seq,
+def plot_inference_sequence(vestibular_seq, beat_seq,
+                            beat_predicted_seq, vestibular_predicted_seq,
+                            e_v_seq, e_b_seq,
                             save_path_html, save_path_png=None):
     """
     Plot sequences with Plotly in three subplots and
@@ -23,6 +24,8 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
     vestibular_predicted_seq : np.array or torch.Tensor of shape [n_steps, 2]
                     (predicted sine + cosine)
     beat_predicted_seq : np.array or torch.Tensor of shape [n_steps]
+    e_v_seq : error of vestibular
+    e_b_seq : error of beat
     save_path_html : Path or str
         Where to save the interactive HTML plot.
     save_path_png : Path or str, optional
@@ -44,9 +47,9 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
 
     # Create subplots: 3 rows, 1 column
     fig = make_subplots(
-        rows=4, cols=1,
-        subplot_titles=["Beat Sequence", "Predicted Beat",
-                        "Actual Vestibular Movement", "Predicted Vestibular Movement"],
+        rows=6, cols=1,
+        subplot_titles=["Beat Sequence", "Predicted Beat", "Error of Predicted Beat",
+                        "Actual Vestibular Movement", "Predicted Vestibular Movement", "Error of Vestibular Movement"],
         shared_xaxes=True,  # so x-zoom is shared
         vertical_spacing=0.1
     )
@@ -75,8 +78,21 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
         row=2, col=1
     )
 
+    # --- Row 3: Error of Predicted Beat ---
+    fig.add_trace(
+        go.Scatter(
+            x=t,
+            y=e_b_seq,  # use .cpu() if on GPU
+            mode='lines+markers',
+            name='Error of Predicted Beat',
+            line=dict(dash='dash', color='purple'),
+            marker=dict(color='purple')
+        ),
+        row=3, col=1
+    )
+
     if vestibular_seq.ndim == 2:
-        # --- Row 2: Actual Vestibular Movement (2 channels) ---
+        # --- Row 4: Actual Vestibular Movement (2 channels) ---
         fig.add_trace(
             go.Scatter(
                 x=t,
@@ -85,7 +101,7 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
                 name='Vestibular sin',
                 line=dict(color='blue')
             ),
-            row=3, col=1
+            row=4, col=1
         )
         fig.add_trace(
             go.Scatter(
@@ -95,10 +111,10 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
                 name='Vestibular cos',
                 line=dict(color='cyan')
             ),
-            row=3, col=1
+            row=4, col=1
         )
 
-        # --- Row 3: Predicted Vestibular Movement (2 channels) ---
+        # --- Row 5: Predicted Vestibular Movement (2 channels) ---
         fig.add_trace(
             go.Scatter(
                 x=t,
@@ -107,7 +123,7 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
                 name='Predicted sin',
                 line=dict(color='green')
             ),
-            row=4, col=1
+            row=5, col=1
         )
         fig.add_trace(
             go.Scatter(
@@ -117,11 +133,33 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
                 name='Predicted cos',
                 line=dict(color='magenta')
             ),
-            row=4, col=1
+            row=5, col=1
+        )
+
+        # --- Row 6: Error of Predicted Vestibular Movement (2 channels) ---
+        fig.add_trace(
+            go.Scatter(
+                x=t,
+                y=e_v_seq[:, 0].cpu().numpy(),
+                mode='lines',
+                name='Error of Predicted sin',
+                line=dict(dash='dash', color='green'),
+            ),
+            row=6, col=1
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=t,
+                y=e_v_seq[:, 1].cpu().numpy(),
+                mode='--',
+                name='Error of Predicted cos',
+                line=dict(dash='dash', color='magenta')
+            ),
+            row=6, col=1
         )
 
     if vestibular_seq.ndim == 1:
-        # --- Row 2: Actual Vestibular Movement (1 channel) ---
+        # --- Row 4: Actual Vestibular Movement (1 channel) ---
         fig.add_trace(
             go.Scatter(
                 x=t,
@@ -130,10 +168,10 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
                 name='Vestibular sin',
                 line=dict(color='blue')
             ),
-            row=3, col=1
+            row=4, col=1
         )
 
-        # --- Row 3: Predicted Vestibular Movement (1 channel) ---
+        # --- Row 5: Predicted Vestibular Movement (1 channel) ---
         fig.add_trace(
             go.Scatter(
                 x=t,
@@ -142,7 +180,19 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
                 name='Predicted sin',
                 line=dict(color='magenta')
             ),
-            row=4, col=1
+            row=5, col=1
+        )
+
+        # --- Row 6: Error of Predicted Vestibular Movement (1 channel) ---
+        fig.add_trace(
+            go.Scatter(
+                x=t,
+                y=vestibular_predicted_seq,
+                mode='lines',
+                name='Error of Predicted sin',
+                line=dict(dash='dash', color='magenta'),
+            ),
+            row=6, col=1
         )
 
     # Add vertical lines at beat times on rows 2, 3, and 4
@@ -153,6 +203,8 @@ def plot_inference_sequence(beat_seq, vestibular_seq,
         fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=2, col=1)
         fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=3, col=1)
         fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=4, col=1)
+        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=5, col=1)
+        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=6, col=1)
 
     # Layout settings
     fig.update_layout(
@@ -214,22 +266,29 @@ def test_saved_model():
     network.reset_states()
     vestibular_predicted_seq = []
     beat_predicted_seq = []
+    e_v_seq = []
+    e_b_seq = []
 
     for beat in beat_seq:
-        vestibular_pred, beat_pred = network.timestep_inference(beat)
+        vestibular_pred, beat_pred, e_v, e_b = network.timestep_inference(beat)
         vestibular_predicted_seq.append(vestibular_pred.squeeze().tolist())
         beat_predicted_seq.append(beat_pred.squeeze().tolist())
+        e_v_seq.append(e_v.squeeze().tolist())
+        e_b_seq.append(e_b.squeeze().tolist())
 
         # predicted_seq.append(vestibular_pred.item())
     vestibular_predicted_seq = np.array(vestibular_predicted_seq)
     beat_predicted_seq = np.array(beat_predicted_seq)
+    e_v_seq = np.array(e_v_seq)
+    e_b_seq = np.array(e_b_seq)
 
     # Plot and save results
     # plot_path = plots_dir / f'inference_plot_step_{args.model_step}.png'
     plot_path_html = plots_dir / f'inference_plot_step_{args.model_step}.html'
     plot_path_png = plots_dir / f'inference_plot_step_{args.model_step}.png'
-    plot_inference_sequence(beat_seq, vestibular_seq,
+    plot_inference_sequence(vestibular_seq, beat_seq,
                             vestibular_predicted_seq, beat_predicted_seq,
+                            e_v_seq, e_b_seq,
                             plot_path_html, plot_path_png)
 
     print(f"Generated plot saved at: {plots_dir}")
