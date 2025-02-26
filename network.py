@@ -70,7 +70,10 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         e_b = beat_input - mu_b if beat_input is not None else torch.zeros_like(mu_b)
 
         if vestibular_input:
-            print(f" vest_input: {vestibular_input} | mu_v: {mu_v} | e_v: {e_v} | difference: {vestibular_input - mu_v}")
+            print(f"vest_input: {vestibular_input} | "
+                  f"mu_v: {mu_v} | "
+                  f"e_v: {e_v} | "
+                  f"difference: {vestibular_input - mu_v}")
 
         return e_rec, e_v, e_b
 
@@ -152,7 +155,6 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
 
         # compute e_v and e_b for graphing them
         _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
-        # print(f"e_v is: {e_v}")
 
         # Optimize states using only beat input
         for _ in range(self.n_inference_steps):

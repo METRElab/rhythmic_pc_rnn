@@ -45,13 +45,13 @@ def plot_inference_sequence(vestibular_seq, beat_seq,
     n_steps = len(beat_seq)
     t = list(range(n_steps))
 
-    # Create subplots: 3 rows, 1 column
+    # Create subplots: 6 rows, 1 column with larger row heights
     fig = make_subplots(
         rows=6, cols=1,
         subplot_titles=["Beat Sequence", "Predicted Beat", "Error of Predicted Beat",
                         "Actual Vestibular Movement", "Predicted Vestibular Movement", "Error of Vestibular Movement"],
         shared_xaxes=True,  # so x-zoom is shared
-        vertical_spacing=0.1
+        vertical_spacing=0.05  # Reduced spacing to allow for larger plots
     )
 
     # --- Row 1: Beat Sequence ---
@@ -206,12 +206,20 @@ def plot_inference_sequence(vestibular_seq, beat_seq,
         fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=5, col=1)
         fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=6, col=1)
 
-    # Layout settings
+    # Layout settings with increased height
     fig.update_layout(
         title='Inference Results',
-        height=900,
+        height=1500,  # Increased from 900 to make plots larger
         showlegend=True
     )
+
+    # Additional subplot adjustments for larger row heights
+    for i in range(1, 7):
+        fig.update_yaxes(
+            title_text=f"Row {i}",
+            row=i, col=1,
+            automargin=True  # Give more margin for better visibility
+        )
 
     # Save interactive HTML (dynamic)
     fig.write_html(str(save_path_html), auto_open=False)
