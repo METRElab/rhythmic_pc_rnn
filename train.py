@@ -8,7 +8,7 @@ from utils import ExperimentManager, generate_input_sequences
 def calc_inference_err(network, config):
     """Run inference testing and log results."""
     # Generate test sequences
-    test_beat_seq, test_vestibular_seq = generate_input_sequences(
+    test_vestibular_seq, test_beat_seq= generate_input_sequences(
         tempo=config['experiment']['tempo'],
         dt=config['experiment']['dt'],
         duration=config['testing']['test_duration'],
@@ -23,9 +23,9 @@ def calc_inference_err(network, config):
         network.reset_states()
         vestibular_preds = []
 
-        for beat, vestibular in zip(test_beat_seq, test_vestibular_seq):
+        for vestibular, beat in zip(test_vestibular_seq, test_beat_seq):
             # Run inference with only beat input
-            vestibular_pred, _, _, _ = network.timestep_inference(beat)
+            vestibular_pred, _, _, _ = network.timestep_inference(vestibular_input=vestibular, beat_input=beat)
             vestibular_preds.append(vestibular_pred)
 
             # Accumulate error
@@ -56,7 +56,7 @@ def train():
     )
 
     # Generate input sequences
-    beat_seq, vestibular_seq = generate_input_sequences(
+    vestibular_seq, beat_seq = generate_input_sequences(
         tempo=config['experiment']['tempo'],
         dt=config['experiment']['dt'],
         duration=config['experiment']['duration'],

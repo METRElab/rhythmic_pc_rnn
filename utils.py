@@ -20,29 +20,6 @@ def generate_input_sequences(tempo, dt, duration, vestibular_size):
     duration : float
         Total sequence duration in seconds
     """
-    # # Calculate number of timesteps
-    # n_steps = int(duration / dt)
-    #
-    # # Generate time points
-    # t = np.arange(0, duration, dt)
-    #
-    # # Generate beat sequence (1 at beat times, 0 elsewhere)
-    # beat_times = np.arange(0, duration, tempo)
-    # beat_indices = (beat_times / dt).astype(int)
-    # beat_sequence = np.zeros(n_steps)
-    # beat_sequence[beat_indices] = 1
-    #
-    # # Generate vestibular sequence (sinusoid matching beat frequency)
-    # frequency = 1 / tempo
-    # # vestibular_sequence = np.sin(2 * np.pi * frequency * t)
-    # vestibular_sequence = np.cos(2 * np.pi * frequency * t)
-    #
-    # # Convert to torch tensors
-    # beat_sequence = torch.FloatTensor(beat_sequence)
-    # vestibular_sequence = torch.FloatTensor(vestibular_sequence)
-    #
-    # return beat_sequence, vestibular_sequence
-
     n_steps = int(duration / dt)
     t = np.arange(0, duration, dt)
 
@@ -68,7 +45,7 @@ def generate_input_sequences(tempo, dt, duration, vestibular_size):
     beat_sequence = torch.FloatTensor(beat_sequence)               # shape [n_steps]
     vestibular_sequence = torch.FloatTensor(vestibular_sequence)   # shape [n_steps, vestibular_size]
 
-    return beat_sequence, vestibular_sequence
+    return vestibular_sequence, beat_sequence
 
 
 class ExperimentManager:

@@ -69,6 +69,9 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         e_v = vestibular_input - mu_v if vestibular_input is not None else torch.zeros_like(mu_v)
         e_b = beat_input - mu_b if beat_input is not None else torch.zeros_like(mu_b)
 
+        if vestibular_input:
+            print(f" vest_input: {vestibular_input} | mu_v: {mu_v} | e_v: {e_v} | difference: {vestibular_input - mu_v}")
+
         return e_rec, e_v, e_b
 
     def optimize_states(self, vestibular_input, beat_input):
@@ -131,8 +134,11 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         _, vestibular_pred, beat_pred = self.compute_predictions()
         return vestibular_pred, beat_pred
 
-    def timestep_inference(self, beat_input: torch.Tensor) -> tuple[
-        Tensor | Any, Tensor | Any, Tensor | Any, Tensor | Any]:
+    def timestep_inference(
+            self,
+            vestibular_input: torch.Tensor,
+            beat_input: torch.Tensor,
+    ) -> tuple[Tensor | Any, Tensor | Any, Tensor | Any, Tensor | Any]:
         """Process one inference timestep with only beat input."""
 
         beat_input = beat_input.view(1, 1)
@@ -145,7 +151,8 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         _, vestibular_pred, beat_pred = self.compute_predictions()
 
         # compute e_v and e_b for graphing them
-        _, e_v, e_b = self.compute_prediction_errors(None, beat_input)
+        _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
+        # print(f"e_v is: {e_v}")
 
         # Optimize states using only beat input
         for _ in range(self.n_inference_steps):

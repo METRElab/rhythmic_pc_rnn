@@ -9,7 +9,7 @@ import numpy as np
 
 
 def plot_inference_sequence(vestibular_seq, beat_seq,
-                            beat_predicted_seq, vestibular_predicted_seq,
+                            vestibular_predicted_seq, beat_predicted_seq,
                             e_v_seq, e_b_seq,
                             save_path_html, save_path_png=None):
     """
@@ -187,7 +187,7 @@ def plot_inference_sequence(vestibular_seq, beat_seq,
         fig.add_trace(
             go.Scatter(
                 x=t,
-                y=vestibular_predicted_seq,
+                y=e_v_seq,
                 mode='lines',
                 name='Error of Predicted sin',
                 line=dict(dash='dash', color='magenta'),
@@ -255,7 +255,7 @@ def test_saved_model():
     network.load_state_dict(checkpoint['model_state_dict'])
 
     # Generate test sequences
-    beat_seq, vestibular_seq = generate_input_sequences(
+    vestibular_seq, beat_seq = generate_input_sequences(
         tempo=config['experiment']['tempo'],
         dt=config['experiment']['dt'],
         duration=config['testing']['test_duration'],
@@ -269,8 +269,11 @@ def test_saved_model():
     e_v_seq = []
     e_b_seq = []
 
-    for beat in beat_seq:
-        vestibular_pred, beat_pred, e_v, e_b = network.timestep_inference(beat)
+    for vestibular, beat in zip(vestibular_seq, beat_seq):
+        vestibular_pred, beat_pred, e_v, e_b = network.timestep_inference(
+            vestibular_input=vestibular,
+            beat_input=beat
+        )
         vestibular_predicted_seq.append(vestibular_pred.squeeze().tolist())
         beat_predicted_seq.append(beat_pred.squeeze().tolist())
         e_v_seq.append(e_v.squeeze().tolist())
