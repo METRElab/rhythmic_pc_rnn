@@ -1,0 +1,19 @@
+experiment:
+  dt: 0.05    # simulation timestep
+  duration: 10.0  # total duration in seconds
+  mode: "beat"    # "sensorimotor" or "beat"
+  n_training_rounds: 100
+  name: "beat_only_exp"
+  random_seed: 111    # random seed for initializing the weights
+  tempo: 0.5  # seconds between beats
+network:
+  associative_size: 32
+  inference_learning_rate: 0.05
+  n_inference_steps: 20
+  weight_learning_rate: 0.01
+saving:
+  base_dir: "experiments"
+  log_every: 10  # steps between logging
+testing:
+  n_inference_rounds: 10  # number of inference rounds during testing
+  test_duration: 10.0      # duration of each test sequence in seconds
