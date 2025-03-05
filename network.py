@@ -5,9 +5,16 @@ from typing import Tuple, Optional, Any
 from torch import Tensor
 
 
-class SensorimotorPredictiveNetworkRNN(nn.Module):
-    def __init__(self, associative_size: int, vestibular_size: int, inference_learning_rate: float,
-                 weight_learning_rate: float, n_inference_steps: int):
+class SensorimotorPCRNN(nn.Module):
+    def __init__(
+            self,
+            associative_size: int,
+            vestibular_size: int,
+            inference_learning_rate: float,
+            weight_learning_rate: float,
+            n_inference_steps: int,
+            random_seed: int = 111,
+    ):
         """
         Initialize predictive coding network with recurrent associative area for
         sensorimotor synchronization learning.
@@ -21,6 +28,7 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         self.inference_learning_rate = inference_learning_rate
         self.weight_learning_rate = weight_learning_rate
         self.n_inference_steps = n_inference_steps
+        self.random_seed = random_seed
 
         # Initialize recurrent weights for associative area
         self.Wrec = nn.Parameter(self._init_weights(associative_size, associative_size),
@@ -42,7 +50,7 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
 
     def _init_weights(self, out_size: int, in_size: int) -> torch.Tensor:
         """Initialize weights with small random values."""
-        torch.manual_seed(111)
+        torch.manual_seed(self.random_seed)
         return torch.randn(out_size, in_size) * 0.05
 
     def _tanh_derivative(self, x: torch.Tensor) -> torch.Tensor:
@@ -68,12 +76,6 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         e_rec = self.x - mu_rec  # Current state vs prediction from previous state
         e_v = vestibular_input - mu_v if vestibular_input is not None else torch.zeros_like(mu_v)
         e_b = beat_input - mu_b if beat_input is not None else torch.zeros_like(mu_b)
-
-        if vestibular_input:
-            print(f"vest_input: {vestibular_input} | "
-                  f"mu_v: {mu_v} | "
-                  f"e_v: {e_v} | "
-                  f"difference: {vestibular_input - mu_v}")
 
         return e_rec, e_v, e_b
 
@@ -150,30 +152,34 @@ class SensorimotorPredictiveNetworkRNN(nn.Module):
         self.x_prev = self.x.clone()
         self.x = self.Wrec @ torch.tanh(self.x_prev)
 
-        # compute predicted beat before optimizing states
-        _, vestibular_pred, beat_pred = self.compute_predictions()
-
-        # compute e_v and e_b for graphing them
-        _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
+        # if we want everything before inference
+        # _, vestibular_pred, beat_pred = self.compute_predictions()
+        # _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
 
         # Optimize states using only beat input
         for _ in range(self.n_inference_steps):
             self.optimize_states(None, beat_input)
 
-        # Return vestibular prediction
-        _, _, _ = self.compute_predictions()
+        # if we want everything after inference
+        _, vestibular_pred, beat_pred = self.compute_predictions()
+        _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
 
         return vestibular_pred, beat_pred, e_v, e_b
 
 
-class BeatPredictiveNetworkRNN(nn.Module):
-    def __init__(self, associative_size: int, inference_learning_rate: float,
-                 weight_learning_rate: float, n_inference_steps: int):
+class BeatPCRNN(nn.Module):
+    def __init__(
+        self,
+        associative_size: int,
+        inference_learning_rate: float,
+        weight_learning_rate: float,
+        n_inference_steps: int,
+        random_seed: int = 111,
+    ):
         """
         Initialize predictive coding network with recurrent associative area for
-        sensorimotor synchronization learning.
+        beat synchronization learning.
         """
-
         super().__init__()  # Call parent class constructor
 
         # Store parameters
@@ -181,6 +187,7 @@ class BeatPredictiveNetworkRNN(nn.Module):
         self.inference_learning_rate = inference_learning_rate
         self.weight_learning_rate = weight_learning_rate
         self.n_inference_steps = n_inference_steps
+        self.random_seed = random_seed
 
         # Initialize recurrent weights for associative area
         self.Wrec = nn.Parameter(self._init_weights(associative_size, associative_size),
@@ -201,7 +208,7 @@ class BeatPredictiveNetworkRNN(nn.Module):
 
     def _init_weights(self, out_size: int, in_size: int) -> torch.Tensor:
         """Initialize weights with small random values."""
-        torch.manual_seed(111)
+        torch.manual_seed(self.random_seed)
         return torch.randn(out_size, in_size) * 0.05
 
     def _tanh_derivative(self, x: torch.Tensor) -> torch.Tensor:
@@ -213,7 +220,7 @@ class BeatPredictiveNetworkRNN(nn.Module):
         # Recurrent predictions use previous state
         mu_rec = self.Wrec @ torch.tanh(self.x_prev)
 
-        # Sensory predictions use current state
+        # Beat prediction uses current state
         mu_b = self.W_beat @ torch.tanh(self.x)
 
         return mu_rec, mu_b
@@ -230,15 +237,13 @@ class BeatPredictiveNetworkRNN(nn.Module):
 
     def optimize_states(self, beat_input):
         """Compute state updates to minimize prediction errors."""
-        # mu_rec, mu_v, mu_b = self.compute_predictions()
         e_rec, e_b = self.compute_prediction_errors(beat_input)
 
         # Start with recurrent errors
         dx = -e_rec
 
-        # Add sensory prediction errors if inputs available
+        # Add beat prediction errors if input available
         if beat_input is not None:
-            # dx += e_b * self.W_beat @ self._tanh_derivative(self.x)
             dx += self.W_beat.T @ (e_b * self.W_beat @ self._tanh_derivative(self.x))
 
         self.x -= self.inference_learning_rate * dx
@@ -258,8 +263,8 @@ class BeatPredictiveNetworkRNN(nn.Module):
         self.Wrec -= self.weight_learning_rate * dWrec
         self.W_beat -= self.weight_learning_rate * dW_beat
 
-    def timestep_train(self, beat_input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Process one training timestep with both inputs available."""
+    def timestep_train(self, beat_input: torch.Tensor) -> torch.Tensor:
+        """Process one training timestep with beat input."""
         beat_input = beat_input.view(1, 1)
 
         # Store current state as previous
@@ -274,22 +279,28 @@ class BeatPredictiveNetworkRNN(nn.Module):
         e_rec, e_b = self.compute_prediction_errors(beat_input)
         self.update_weights(e_rec, e_b)
 
-        # Return predictions
+        # Return prediction
         _, beat_pred = self.compute_predictions()
         return beat_pred
 
-    def timestep_inference(self, beat_input: torch.Tensor) -> torch.Tensor:
-        """Process one inference timestep with only beat input."""
+    def timestep_inference(self, beat_input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Process one inference timestep with beat input."""
         beat_input = beat_input.view(1, 1)
 
         # Store current state as previous
         self.x_prev = self.x.clone()
         self.x = self.Wrec @ torch.tanh(self.x_prev)
 
-        # Optimize states using only beat input
-        for _ in range(self.n_inference_steps):
-            self.optimize_states(None)
-
-        # Return vestibular prediction
+        # if we want everything before inference
         _, beat_pred = self.compute_predictions()
-        return beat_pred
+        _, e_b = self.compute_prediction_errors(beat_input)
+
+        # Optimize states
+        for _ in range(self.n_inference_steps):
+            self.optimize_states(beat_input)
+
+        # if we want everything after inference
+        # _, beat_pred = self.compute_predictions()
+        # _, e_b = self.compute_prediction_errors(beat_input)
+
+        return beat_pred, e_b

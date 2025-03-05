@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="Black">
+    <option name="enabledOnReformat" value="true" />
+    <option name="sdkUUID" value="58d90c7d-b541-441f-a33e-394f70721b1c" />
+  </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="phd_codes" project-jdk-type="Python SDK" />
 </project>
