@@ -143,6 +143,7 @@ class SensorimotorPCRNN(nn.Module):
             self,
             vestibular_input: torch.Tensor,
             beat_input: torch.Tensor,
+            continuation: bool = False,
     ) -> tuple[Tensor | Any, Tensor | Any, Tensor | Any, Tensor | Any]:
         """Process one inference timestep with only beat input."""
 
@@ -153,16 +154,19 @@ class SensorimotorPCRNN(nn.Module):
         self.x = self.Wrec @ torch.tanh(self.x_prev)
 
         # if we want everything before inference
-        # _, vestibular_pred, beat_pred = self.compute_predictions()
-        # _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
+        _, vestibular_pred, beat_pred = self.compute_predictions()
+        _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
 
         # Optimize states using only beat input
         for _ in range(self.n_inference_steps):
-            self.optimize_states(None, beat_input)
+            if continuation:
+                self.optimize_states(None, None)
+            else:
+                self.optimize_states(None, beat_input)
 
         # if we want everything after inference
-        _, vestibular_pred, beat_pred = self.compute_predictions()
-        _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
+        # _, vestibular_pred, beat_pred = self.compute_predictions()
+        # _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
 
         return vestibular_pred, beat_pred, e_v, e_b
 

@@ -212,6 +212,7 @@ def plot_inference_sequence_sensorimotor(
     fig.update_layout(
         title='Inference Results',
         height=1500,  # Increased from 900 to make plots larger
+        width=3000,
         showlegend=True
     )
 
@@ -383,24 +384,26 @@ def test_sensorimotor_model(config_path: Path, args):
     e_v_seq = []
     e_b_seq = []
 
-    for vestibular, beat in zip(vestibular_seq, beat_seq):
+    continuation = bool(args.continuation)
+    for step, (vestibular, beat) in enumerate(zip(vestibular_seq, beat_seq)):
+        continuation_flag = continuation and (step > 0.5 * len(vestibular_seq))
         vestibular_pred, beat_pred, e_v, e_b = network.timestep_inference(
             vestibular_input=vestibular,
-            beat_input=beat
+            beat_input=beat,
+            continuation=continuation_flag
         )
+
         vestibular_predicted_seq.append(vestibular_pred.squeeze().tolist())
         beat_predicted_seq.append(beat_pred.squeeze().tolist())
         e_v_seq.append(e_v.squeeze().tolist())
         e_b_seq.append(e_b.squeeze().tolist())
 
-        # predicted_seq.append(vestibular_pred.item())
     vestibular_predicted_seq = np.array(vestibular_predicted_seq)
     beat_predicted_seq = np.array(beat_predicted_seq)
     e_v_seq = np.array(e_v_seq)
     e_b_seq = np.array(e_b_seq)
 
     # Plot and save results
-    # plot_path = plots_dir / f'inference_plot_step_{args.model_step}.png'
     plot_path_html = plots_dir / f'inference_plot_step_{args.model_step}.html'
     plot_path_png = plots_dir / f'inference_plot_step_{args.model_step}.png'
     plot_inference_sequence_sensorimotor(
@@ -474,8 +477,12 @@ def test_beat_model(config_path: Path, args):
 
 def test_and_plot():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, required=True, help='Path to saved config file')
-    parser.add_argument('--model_step', type=int, required=True, help='Which saved model step to load')
+    parser.add_argument('--config', type=str, required=True,
+                        help='Path to saved config file')
+    parser.add_argument('--model_step', type=int, required=True,
+                        help='Which saved model step to load')
+    parser.add_argument('--continuation', type=bool, required=True,
+                        help='Also include continuation phase?')
     args = parser.parse_args()
 
     print('here')
@@ -487,7 +494,7 @@ def test_and_plot():
 
     if config['experiment']['mode'] == 'beat':
         test_beat_model(config_path, args)
-    elif config['experiment']['mode'] == 'sensorimotor' or  config['experiment']['mode'] == 'doublebeat':
+    elif config['experiment']['mode'] == 'sensorimotor' or config['experiment']['mode'] == 'doublebeat':
         test_sensorimotor_model(config_path, args)
 
 
