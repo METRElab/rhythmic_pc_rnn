@@ -35,9 +35,14 @@ class SensorimotorPCRNN(nn.Module):
                                  requires_grad=False)  # [associative_size, associative_size]
 
         # Initialize prediction weights for sensory pathways
-        self.W_vestibular = nn.Parameter(self._init_weights(vestibular_size, associative_size), requires_grad=False)
-        self.W_beat = nn.Parameter(self._init_weights(1, associative_size),
-                                   requires_grad=False)  # [1, associative_size]
+        self.W_vestibular = nn.Parameter(
+            self._init_weights(vestibular_size, associative_size),
+            requires_grad=False
+        )  # [1, associative_size]
+        self.W_beat = nn.Parameter(
+            self._init_weights(1, associative_size),
+            requires_grad=False
+        )  # [1, associative_size]
 
         # Initialize states
         self.x = torch.zeros(associative_size, 1)  # Current state [associative_size, 1]
@@ -89,11 +94,13 @@ class SensorimotorPCRNN(nn.Module):
 
         # Add sensory prediction errors if inputs available
         if vestibular_input is not None:
-            # dx += e_v * self.W_vestibular @ self._tanh_derivative(self.x)
-            dx += self.W_vestibular.T @ (e_v * self.W_vestibular @ self._tanh_derivative(self.x))
+            # dx += e_v * self.W_vestibular.T * self._tanh_derivative(self.x)
+            # dx += self.W_vestibular.T @ (e_v * self.W_vestibular @ self._tanh_derivative(self.x))
+            dx += e_v * self.W_vestibular.T * self._tanh_derivative(self.x)
         if beat_input is not None:
-            # dx += e_b * self.W_beat @ self._tanh_derivative(self.x)
-            dx += self.W_beat.T @ (e_b * self.W_beat @ self._tanh_derivative(self.x))
+            # dx += e_b * self.W_beat.T * self._tanh_derivative(self.x)
+            # dx += self.W_beat.T @ (e_b * self.W_beat @ self._tanh_derivative(self.x))
+            dx += e_b * self.W_beat.T * self._tanh_derivative(self.x)
 
         self.x -= self.inference_learning_rate * dx
 
@@ -108,9 +115,12 @@ class SensorimotorPCRNN(nn.Module):
     def update_weights(self, e_rec: torch.Tensor, e_v: torch.Tensor, e_b: torch.Tensor):
         """Update weights based on prediction errors."""
         # Compute weight updates
-        dWrec = -e_rec @ torch.tanh(self.x_prev).T  # todo : should it be x_prev ???
-        dW_vestibular = -e_v @ torch.tanh(self.x).T
-        dW_beat = -e_b @ torch.tanh(self.x).T
+        # dWrec = -e_rec @ torch.tanh(self.x_prev).T  # todo : should it be x_prev ???
+        dWrec = e_rec @ torch.tanh(self.x_prev).T  # todo : should it be x_prev ???
+        # dW_vestibular = -e_v @ torch.tanh(self.x).T
+        dW_vestibular = e_v @ torch.tanh(self.x).T
+        # dW_beat = -e_b @ torch.tanh(self.x).T
+        dW_beat = e_b @ torch.tanh(self.x).T
 
         # Apply updates
         self.Wrec -= self.weight_learning_rate * dWrec

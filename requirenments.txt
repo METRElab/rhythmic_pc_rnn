@@ -1,0 +1,6 @@
+torch>=1.0.0
+numpy>=1.19.0
+pyyaml>=5.1
+plotly>=4.14.0
+tensorboard>=2.3.0
+kaleido>=0.2.1

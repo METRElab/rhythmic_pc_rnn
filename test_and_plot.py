@@ -481,8 +481,8 @@ def test_and_plot():
                         help='Path to saved config file')
     parser.add_argument('--model_step', type=int, required=True,
                         help='Which saved model step to load')
-    parser.add_argument('--continuation', type=bool, required=True,
-                        help='Also include continuation phase?')
+    parser.add_argument('--continuation',
+                        action='store_true', help='Also include continuation phase?')
     args = parser.parse_args()
 
     print('here')

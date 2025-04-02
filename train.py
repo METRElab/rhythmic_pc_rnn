@@ -105,7 +105,7 @@ def train_sensorimotor(exp_manager: ExperimentManager):
     accumulated_vest_error = 0
     accumulated_beat_error = 0
     steps_since_last_log = 0
-    min_avg_inference_error = np.Inf
+    min_avg_inference_error = np.inf
 
     for round in range(config['experiment']['n_training_rounds']):
         network.reset_states()
