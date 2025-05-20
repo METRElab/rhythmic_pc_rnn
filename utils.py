@@ -50,26 +50,26 @@ def generate_input_sequences(
         frequency = 1 / tempo
 
         # v1: Generate *both* sine and cosine:
-        vestibular_sin = np.sin(2 * np.pi * frequency * t)
-        vestibular_cos = np.cos(2 * np.pi * frequency * t)
-
-        if vestibular_size == 2:
-            # Combine into a single array, shape [n_steps, 2]
-            vestibular_sequence = np.stack([vestibular_sin, vestibular_cos], axis=1)
-        else:
-            vestibular_sequence = vestibular_cos
-        # Convert to torch tensors
-        vestibular_sequence = torch.FloatTensor(vestibular_sequence)  # shape [n_steps, vestibular_size]
+        # vestibular_sin = np.sin(2 * np.pi * frequency * t)
+        # vestibular_cos = np.cos(2 * np.pi * frequency * t)
+        #
+        # if vestibular_size == 2:
+        #     # Combine into a single array, shape [n_steps, 2]
+        #     vestibular_sequence = np.stack([vestibular_sin, vestibular_cos], axis=1)
+        # else:
+        #     vestibular_sequence = vestibular_cos
+        # # Convert to torch tensors
+        # vestibular_sequence = torch.FloatTensor(vestibular_sequence)  # shape [n_steps, vestibular_size]
 
         # v2: Create a sawtooth wave with period matching the tempo
-        # sawtooth = 2 * (t * frequency - np.floor(0.5 + t * frequency))
-        #
-        # # Convert to triangular wave by taking absolute value and adjusting scale
-        # vestibular_tri = 1 - 2 * np.abs(sawtooth)
-        #
-        # vestibular_sequence = torch.FloatTensor(
-        #     vestibular_tri
-        # )  # shape [n_steps, vestibular_size]
+        sawtooth = 2 * (t * frequency - np.floor(0.5 + t * frequency))
+
+        # Convert to triangular wave by taking absolute value and adjusting scale
+        vestibular_tri = 1 - 2 * np.abs(sawtooth)
+
+        vestibular_sequence = torch.FloatTensor(
+            vestibular_tri
+        )  # shape [n_steps, vestibular_size]
 
         return vestibular_sequence, beat_sequence
 

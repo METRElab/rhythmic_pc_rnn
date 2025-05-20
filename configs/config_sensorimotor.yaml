@@ -4,14 +4,14 @@ experiment:
   mode: "sensorimotor"    # "sensorimotor" or "beat"
   n_training_rounds: 1000
   name: "sensorimotor_exp"
-  random_seed: 111    # random seed for initializing the weights
+  random_seed: 64    # random seed for initializing the weights
   tempo: 0.5  # seconds between beats
 network:
   associative_size: 32
-  inference_learning_rate: 0.05
+  inference_learning_rate: 0.1
   n_inference_steps: 20
   vestibular_size: 1
-  weight_learning_rate: 0.0005
+  weight_learning_rate: 0.03
 saving:
   base_dir: "experiments"
   log_every: 10  # steps between logging

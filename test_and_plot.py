@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 from pathlib import Path
 import numpy as np
 
-from network import SensorimotorPCRNN, BeatPCRNN
+from network import SensorimotorPCRNN
 from utils import generate_input_sequences
 
 
@@ -420,61 +420,6 @@ def test_sensorimotor_model(config_path: Path, args):
     print(f"Generated plot saved at: {plots_dir}")
 
 
-def test_beat_model(config_path: Path, args):
-
-    exp_dir = config_path.parent
-
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-
-    # Create plots directory
-    plots_dir = exp_dir / 'inference_plots'
-    plots_dir.mkdir(exist_ok=True)
-
-    # Initialize network
-    network = BeatPCRNN(
-        associative_size=config['network']['associative_size'],
-        inference_learning_rate=config['network']['inference_learning_rate'],
-        weight_learning_rate=config['network']['weight_learning_rate'],
-        n_inference_steps=config['network']['n_inference_steps'],
-        random_seed=config['experiment']['random_seed']
-    )
-
-    # Load saved model
-    checkpoint = torch.load(exp_dir / f'model_step_{args.model_step}.pt')
-    network.load_state_dict(checkpoint['model_state_dict'])
-
-    # Generate test sequence
-    beat_seq = generate_input_sequences(
-        tempo=config['experiment']['tempo'],
-        dt=config['experiment']['dt'],
-        duration=config['testing']['test_duration'],
-        mode=config['experiment']['mode'],
-    )
-
-    # Run inference
-    network.reset_states()
-    beat_predicted_seq = []
-    e_b_seq = []
-
-    for i in range(len(beat_seq)):
-        beat = beat_seq[i]
-        beat_pred, e_b = network.timestep_inference(beat_input=beat)
-        beat_predicted_seq.append(beat_pred.squeeze().tolist())
-        e_b_seq.append(e_b.squeeze().tolist())
-
-    beat_predicted_seq = np.array(beat_predicted_seq)
-    e_b_seq = np.array(e_b_seq)
-
-    # Plot and save results
-    plot_path_html = plots_dir / f'beat_inference_plot_step_{args.model_step}.html'
-    plot_path_png = plots_dir / f'beat_inference_plot_step_{args.model_step}.png'
-
-    plot_inference_sequence_beat(beat_seq, beat_predicted_seq, e_b_seq, plot_path_html, plot_path_png)
-
-    print(f"Generated plot saved at: {plots_dir}")
-
-
 def test_and_plot():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True,
@@ -485,7 +430,6 @@ def test_and_plot():
                         action='store_true', help='Also include continuation phase?')
     args = parser.parse_args()
 
-    print('here')
     # Load config
     config_path = Path(args.config)
 
@@ -493,7 +437,7 @@ def test_and_plot():
         config = yaml.safe_load(f)
 
     if config['experiment']['mode'] == 'beat':
-        test_beat_model(config_path, args)
+        pass
     elif config['experiment']['mode'] == 'sensorimotor' or config['experiment']['mode'] == 'doublebeat':
         test_sensorimotor_model(config_path, args)
 
