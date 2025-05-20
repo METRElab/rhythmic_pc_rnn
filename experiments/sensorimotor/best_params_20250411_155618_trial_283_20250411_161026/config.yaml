@@ -1,0 +1,20 @@
+experiment:
+  dt: 0.05
+  duration: 10.0
+  mode: sensorimotor
+  n_training_rounds: 1000
+  name: best_params_20250411_155618_trial_283_20250411_161026
+  random_seed: 753
+  tempo: 0.5
+network:
+  associative_size: 59
+  inference_learning_rate: 0.14351305782921517
+  n_inference_steps: 13
+  vestibular_size: 1
+  weight_learning_rate: 0.4644780706397556
+saving:
+  base_dir: experiments
+  log_every: 10
+testing:
+  n_inference_rounds: 1
+  test_duration: 20.0
