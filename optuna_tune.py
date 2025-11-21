@@ -87,7 +87,7 @@ def objective(trial, base_config):
 
             # Report intermediate values for pruning
             if global_step % 200 == 0 and steps_since_last_log > 0:
-                current_inference_error = calc_inference_err_sensorimotor(network, config)
+                current_inference_error, _ = calc_inference_err_sensorimotor(network, config)
                 if current_inference_error < min_inference_error:
                     min_inference_error = copy.deepcopy(current_inference_error)
 
