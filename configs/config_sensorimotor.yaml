@@ -1,20 +1,32 @@
 experiment:
-  dt: 0.05    # simulation timestep
-  duration: 10.0  # total duration in seconds
-  mode: "sensorimotor"    # "sensorimotor" or "beat"
-  n_training_rounds: 1000
-  name: "sensorimotor_exp"
-  random_seed: 64    # random seed for initializing the weights
-  tempo: 0.5  # seconds between beats
+  dt: 0.05                    # simulation timestep in seconds
+  duration: 10.0              # total duration per training round in seconds
+  mode: "sensorimotor"        # "sensorimotor" or "doublebeat"
+  n_training_rounds: 1000     # number of training rounds
+  name: "sensorimotor_exp"    # experiment name (timestamp will be appended)
+  random_seed: 164            # random seed for weight initialization
+  tempo:
+    mode: "single"             # "single" or "range"
+    value: 0.5                # used when mode is "single"
+    min: 0.4                  # used when mode is "range"
+    max: 0.8                  # used when mode is "range"
+    step: 0.1                 # discrete steps for range mode
+
 network:
-  associative_size: 32
-  inference_learning_rate: 0.1
-  n_inference_steps: 20
-  vestibular_size: 1
-  weight_learning_rate: 0.03
+  associative_size: 60        # size of associative layer
+  inference_learning_rate: 0.049706088801492805
+  n_inference_steps: 34       # Euler integration steps per timestep
+  vestibular_size: 1          # dimension of vestibular input
+  weight_learning_rate: 0.47037325216247716
+
 saving:
-  base_dir: "experiments"
-  log_every: 10  # steps between logging
+  base_dir: "experiments"     # base directory for saving experiments
+  log_every: 10               # steps between logging
+
+logging:
+  level: "INFO"               # DEBUG, INFO, WARNING, ERROR
+
 testing:
-  n_inference_rounds: 1  # number of inference rounds during testing
-  test_duration: 20.0      # duration of each test sequence in seconds
+  test_duration: 20.0         # duration of test sequence in seconds
+  continuation: false         # whether to test continuation (no auditory input)
+  prediction_timing: "after"  # "before" or "after" inference optimization

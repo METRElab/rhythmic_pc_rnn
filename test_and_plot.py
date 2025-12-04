@@ -1,119 +1,171 @@
+"""
+Testing and visualization script for trained sensorimotor networks.
+
+Loads a trained model and generates inference plots showing predictions
+versus actual inputs for both vestibular and beat signals.
+"""
+
 import argparse
 import yaml
 import torch
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pathlib import Path
-import numpy as np
+from typing import Dict, Any, Optional, Tuple
 
 from network import SensorimotorPCRNN
-from utils import generate_input_sequences
+from utils import generate_input_sequences, get_tempo_values
+from logger import create_logger, ExperimentLogger
+
+
+def generate_plot_filename(
+    model_step: int,
+    tempo: float,
+    prediction_timing: str,
+    continuation: bool,
+    extension: str = "html",
+) -> str:
+    """
+    Generate a standardized plot filename based on test parameters.
+
+    Args:
+        model_step: Step of the loaded model
+        tempo: Tempo value used in testing
+        prediction_timing: "before" or "after" inference optimization
+        continuation: Whether continuation mode was used
+        extension: File extension (html or png)
+
+    Returns:
+        Formatted filename string
+    """
+    continuation_suffix = "with_continuation" if continuation else "no_continuation"
+    filename = (
+        f"inference_plot_step_{model_step}_"
+        f"tempo_{tempo}_"
+        f"{prediction_timing}_inference_"
+        f"{continuation_suffix}.{extension}"
+    )
+    return filename
 
 
 def plot_inference_sequence_sensorimotor(
-        vestibular_seq, beat_seq,
-        vestibular_predicted_seq, beat_predicted_seq,
-        e_v_seq, e_b_seq,
-        save_path_html, save_path_png=None
-):
+    vestibular_seq: torch.Tensor,
+    beat_seq: torch.Tensor,
+    vestibular_predicted_seq: np.ndarray,
+    beat_predicted_seq: np.ndarray,
+    e_v_seq: np.ndarray,
+    e_b_seq: np.ndarray,
+    save_path_html: Path,
+    save_path_png: Optional[Path] = None,
+) -> None:
     """
-    Plot sequences with Plotly in three subplots and
-    add vertical lines at beat times for clarity.
+    Plot inference sequences with Plotly in six subplots.
 
-    Parameters
-    ----------
-    beat_seq : torch.Tensor of shape [n_steps]
-    vestibular_seq : torch.Tensor of shape [n_steps, 2]
-                    (sine + cosine)
-    vestibular_predicted_seq : np.array or torch.Tensor of shape [n_steps, 2]
-                    (predicted sine + cosine)
-    beat_predicted_seq : np.array or torch.Tensor of shape [n_steps]
-    e_v_seq : error of vestibular
-    e_b_seq : error of beat
-    save_path_html : Path or str
-        Where to save the interactive HTML plot.
-    save_path_png : Path or str, optional
-        Where to save a high-res static PNG plot (requires kaleido).
+    Creates an interactive visualization showing actual vs predicted
+    signals for both vestibular and beat modalities, plus prediction errors.
+
+    Args:
+        vestibular_seq: Actual vestibular input tensor of shape [n_steps] or [n_steps, 2]
+        beat_seq: Actual beat input tensor of shape [n_steps]
+        vestibular_predicted_seq: Predicted vestibular array of shape [n_steps] or [n_steps, 2]
+        beat_predicted_seq: Predicted beat array of shape [n_steps]
+        e_v_seq: Vestibular prediction error array
+        e_b_seq: Beat prediction error array
+        save_path_html: Path to save interactive HTML plot
+        save_path_png: Optional path to save static PNG plot
     """
+    # Convert predicted_seq to NumPy if still a torch.Tensor
+    if hasattr(vestibular_predicted_seq, "numpy"):
+        vestibular_predicted_seq = vestibular_predicted_seq.numpy()
 
-    # Convert predicted_seq to NumPy if it's still a torch.Tensor
-    if hasattr(vestibular_predicted_seq, 'numpy'):
-        vestibular_predicted_seq = vestibular_predicted_seq.numpy()  # shape [n_steps, 2]
-
-    if hasattr(beat_predicted_seq, 'numpy'):
-        beat_predicted_seq = beat_predicted_seq.numpy()  # shape [n_steps]
+    if hasattr(beat_predicted_seq, "numpy"):
+        beat_predicted_seq = beat_predicted_seq.numpy()
 
     # Time axis
     n_steps = len(beat_seq)
     t = list(range(n_steps))
 
-    # Create subplots: 6 rows, 1 column with larger row heights
+    # Create subplots: 6 rows, 1 column
     fig = make_subplots(
-        rows=6, cols=1,
-        subplot_titles=["Beat Sequence", "Predicted Beat", "Error of Predicted Beat",
-                        "Actual Vestibular Movement", "Predicted Vestibular Movement", "Error of Vestibular Movement"],
-        shared_xaxes=True,  # so x-zoom is shared
-        vertical_spacing=0.05  # Reduced spacing to allow for larger plots
+        rows=6,
+        cols=1,
+        subplot_titles=[
+            "Beat Sequence",
+            "Predicted Beat",
+            "Error of Predicted Beat",
+            "Actual Vestibular Movement",
+            "Predicted Vestibular Movement",
+            "Error of Vestibular Movement",
+        ],
+        shared_xaxes=True,
+        vertical_spacing=0.05,
     )
 
     # --- Row 1: Beat Sequence ---
     fig.add_trace(
         go.Scatter(
             x=t,
-            y=beat_seq.cpu().numpy(),  # use .cpu() if on GPU
-            mode='lines+markers',
-            name='Beat',
-            marker=dict(color='red')
+            y=beat_seq.cpu().numpy(),
+            mode="lines+markers",
+            name="Beat",
+            marker=dict(color="red"),
         ),
-        row=1, col=1
+        row=1,
+        col=1,
     )
 
     # --- Row 2: Predicted Beat Sequence ---
     fig.add_trace(
         go.Scatter(
             x=t,
-            y=beat_predicted_seq,  # use .cpu() if on GPU
-            mode='lines+markers',
-            name='Predicted Beat',
-            marker=dict(color='purple')
+            y=beat_predicted_seq,
+            mode="lines+markers",
+            name="Predicted Beat",
+            marker=dict(color="purple"),
         ),
-        row=2, col=1
+        row=2,
+        col=1,
     )
 
     # --- Row 3: Error of Predicted Beat ---
     fig.add_trace(
         go.Scatter(
             x=t,
-            y=e_b_seq,  # use .cpu() if on GPU
-            mode='lines+markers',
-            name='Error of Predicted Beat',
-            line=dict(dash='dash', color='purple'),
-            marker=dict(color='purple')
+            y=e_b_seq,
+            mode="lines+markers",
+            name="Error of Predicted Beat",
+            line=dict(dash="dash", color="purple"),
+            marker=dict(color="purple"),
         ),
-        row=3, col=1
+        row=3,
+        col=1,
     )
 
+    # Handle 1D or 2D vestibular sequences
     if vestibular_seq.ndim == 2:
         # --- Row 4: Actual Vestibular Movement (2 channels) ---
         fig.add_trace(
             go.Scatter(
                 x=t,
                 y=vestibular_seq[:, 0].cpu().numpy(),
-                mode='lines',
-                name='Vestibular sin',
-                line=dict(color='blue')
+                mode="lines",
+                name="Vestibular ch0",
+                line=dict(color="blue"),
             ),
-            row=4, col=1
+            row=4,
+            col=1,
         )
         fig.add_trace(
             go.Scatter(
                 x=t,
                 y=vestibular_seq[:, 1].cpu().numpy(),
-                mode='lines',
-                name='Vestibular cos',
-                line=dict(color='cyan')
+                mode="lines",
+                name="Vestibular ch1",
+                line=dict(color="cyan"),
             ),
-            row=4, col=1
+            row=4,
+            col=1,
         )
 
         # --- Row 5: Predicted Vestibular Movement (2 channels) ---
@@ -121,56 +173,61 @@ def plot_inference_sequence_sensorimotor(
             go.Scatter(
                 x=t,
                 y=vestibular_predicted_seq[:, 0],
-                mode='lines',
-                name='Predicted sin',
-                line=dict(color='green')
+                mode="lines",
+                name="Predicted ch0",
+                line=dict(color="green"),
             ),
-            row=5, col=1
+            row=5,
+            col=1,
         )
         fig.add_trace(
             go.Scatter(
                 x=t,
                 y=vestibular_predicted_seq[:, 1],
-                mode='lines',
-                name='Predicted cos',
-                line=dict(color='magenta')
+                mode="lines",
+                name="Predicted ch1",
+                line=dict(color="magenta"),
             ),
-            row=5, col=1
+            row=5,
+            col=1,
         )
 
         # --- Row 6: Error of Predicted Vestibular Movement (2 channels) ---
         fig.add_trace(
             go.Scatter(
                 x=t,
-                y=e_v_seq[:, 0].cpu().numpy(),
-                mode='lines',
-                name='Error of Predicted sin',
-                line=dict(dash='dash', color='green'),
+                y=e_v_seq[:, 0],
+                mode="lines",
+                name="Error ch0",
+                line=dict(dash="dash", color="green"),
             ),
-            row=6, col=1
+            row=6,
+            col=1,
         )
         fig.add_trace(
             go.Scatter(
                 x=t,
-                y=e_v_seq[:, 1].cpu().numpy(),
-                mode='--',
-                name='Error of Predicted cos',
-                line=dict(dash='dash', color='magenta')
+                y=e_v_seq[:, 1],
+                mode="lines",
+                name="Error ch1",
+                line=dict(dash="dash", color="magenta"),
             ),
-            row=6, col=1
+            row=6,
+            col=1,
         )
 
-    if vestibular_seq.ndim == 1:
+    else:
         # --- Row 4: Actual Vestibular Movement (1 channel) ---
         fig.add_trace(
             go.Scatter(
                 x=t,
                 y=vestibular_seq.cpu().numpy(),
-                mode='lines',
-                name='Vestibular sin',
-                line=dict(color='blue')
+                mode="lines",
+                name="Vestibular",
+                line=dict(color="blue"),
             ),
-            row=4, col=1
+            row=4,
+            col=1,
         )
 
         # --- Row 5: Predicted Vestibular Movement (1 channel) ---
@@ -178,11 +235,12 @@ def plot_inference_sequence_sensorimotor(
             go.Scatter(
                 x=t,
                 y=vestibular_predicted_seq,
-                mode='lines',
-                name='Predicted sin',
-                line=dict(color='magenta')
+                mode="lines",
+                name="Predicted Vestibular",
+                line=dict(color="magenta"),
             ),
-            row=5, col=1
+            row=5,
+            col=1,
         )
 
         # --- Row 6: Error of Predicted Vestibular Movement (1 channel) ---
@@ -190,256 +248,310 @@ def plot_inference_sequence_sensorimotor(
             go.Scatter(
                 x=t,
                 y=e_v_seq,
-                mode='lines',
-                name='Error of Predicted sin',
-                line=dict(dash='dash', color='magenta'),
+                mode="lines",
+                name="Error Vestibular",
+                line=dict(dash="dash", color="magenta"),
             ),
-            row=6, col=1
+            row=6,
+            col=1,
         )
 
-    # Add vertical lines at beat times on rows 2, 3, and 4
+    # Add vertical lines at beat times on rows 2-6
     beat_times = [i for i, beat in enumerate(beat_seq) if beat.item() > 0]
     for b in beat_times:
-        # add_vline row argument is the *domain* row index, not the subplot index
-        # but Plotly 5+ allows `row` and `col` in add_vline:
-        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=2, col=1)
-        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=3, col=1)
-        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=4, col=1)
-        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=5, col=1)
-        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=6, col=1)
+        for row in range(2, 7):
+            fig.add_vline(
+                x=b, line_width=1, line_dash="dash", line_color="red", row=row, col=1
+            )
 
-    # Layout settings with increased height
+    # Layout settings
     fig.update_layout(
-        title='Inference Results',
-        height=1500,  # Increased from 900 to make plots larger
-        width=3000,
-        showlegend=True
+        title="Inference Results", height=1500, width=3000, showlegend=True
     )
 
-    # Additional subplot adjustments for larger row heights
-    for i in range(1, 7):
-        fig.update_yaxes(
-            title_text=f"Row {i}",
-            row=i, col=1,
-            automargin=True  # Give more margin for better visibility
+    # Update y-axis labels
+    y_labels = [
+        "Beat",
+        "Pred Beat",
+        "Beat Error",
+        "Vestibular",
+        "Pred Vestibular",
+        "Vest Error",
+    ]
+    for i, label in enumerate(y_labels, start=1):
+        fig.update_yaxes(title_text=label, row=i, col=1, automargin=True)
+
+    # Save interactive HTML
+    fig.write_html(str(save_path_html), auto_open=False)
+
+    # Optionally save high-res static PNG
+    if save_path_png is not None:
+        fig.write_image(str(save_path_png), scale=3)
+
+
+def run_inference(
+    network: SensorimotorPCRNN,
+    vestibular_seq: torch.Tensor,
+    beat_seq: torch.Tensor,
+    continuation: bool,
+    continuation_start_fraction: float = 0.5,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Run inference on a sequence and collect predictions.
+
+    Args:
+        network: Trained SensorimotorPCRNN network
+        vestibular_seq: Vestibular input sequence
+        beat_seq: Beat input sequence
+        continuation: Whether to enable continuation mode
+        continuation_start_fraction: Fraction of sequence after which continuation starts
+
+    Returns:
+        Tuple of (vestibular_predicted_seq, beat_predicted_seq, e_v_seq, e_b_seq)
+    """
+    network.reset_states()
+
+    vestibular_predicted_list = []
+    beat_predicted_list = []
+    e_v_list = []
+    e_b_list = []
+
+    n_steps = len(vestibular_seq)
+    continuation_start = int(continuation_start_fraction * n_steps)
+
+    for step, (vestibular, beat) in enumerate(zip(vestibular_seq, beat_seq)):
+        # Enable continuation after specified fraction of sequence
+        continuation_flag = continuation and (step > continuation_start)
+
+        vestibular_pred, beat_pred, e_v, e_b = network.timestep_inference(
+            vestibular_input=vestibular, beat_input=beat, continuation=continuation_flag
         )
 
-    # Save interactive HTML (dynamic)
-    fig.write_html(str(save_path_html), auto_open=False)
-    print(f"Interactive Plotly figure saved to: {save_path_html}")
+        vestibular_predicted_list.append(vestibular_pred.squeeze().tolist())
+        beat_predicted_list.append(beat_pred.squeeze().tolist())
+        e_v_list.append(e_v.squeeze().tolist())
+        e_b_list.append(e_b.squeeze().tolist())
 
-    # Optionally, save a high-res static PNG (requires kaleido).
-    if save_path_png is not None:
-        # scale=2 or higher for increased resolution
-        fig.write_image(str(save_path_png), scale=3)
-        print(f"High-resolution PNG saved to: {save_path_png}")
+    vestibular_predicted_seq = np.array(vestibular_predicted_list)
+    beat_predicted_seq = np.array(beat_predicted_list)
+    e_v_seq = np.array(e_v_list)
+    e_b_seq = np.array(e_b_list)
+
+    return vestibular_predicted_seq, beat_predicted_seq, e_v_seq, e_b_seq
 
 
-def plot_inference_sequence_beat(
-        beat_seq,
-        beat_predicted_seq,
-        e_b_seq,
-        save_path_html,
-        save_path_png=None
-):
+def calculate_test_errors(
+    vestibular_seq: torch.Tensor,
+    beat_seq: torch.Tensor,
+    vestibular_predicted_seq: np.ndarray,
+    beat_predicted_seq: np.ndarray,
+) -> Tuple[float, float]:
     """
-    Plot beat sequences with Plotly in three subplots and
-    add vertical lines at beat times for clarity.
+    Calculate average prediction errors for test sequence.
 
-    Parameters
-    ----------
-    beat_seq : torch.Tensor of shape [n_steps]
-    beat_predicted_seq : np.array or torch.Tensor of shape [n_steps]
-    e_b_seq : error of beat
-    save_path_html : Path or str
-        Where to save the interactive HTML plot.
-    save_path_png : Path or str, optional
-        Where to save a high-res static PNG plot (requires kaleido).
+    Args:
+        vestibular_seq: Actual vestibular input
+        beat_seq: Actual beat input
+        vestibular_predicted_seq: Predicted vestibular values
+        beat_predicted_seq: Predicted beat values
+
+    Returns:
+        Tuple of (avg_vest_error, avg_beat_error)
     """
+    vestibular_np = vestibular_seq.cpu().numpy()
+    beat_np = beat_seq.cpu().numpy()
 
-    # Convert predicted_seq to NumPy if it's still a torch.Tensor
-    if hasattr(beat_predicted_seq, 'numpy'):
-        beat_predicted_seq = beat_predicted_seq.numpy()  # shape [n_steps]
+    vest_error = np.mean((vestibular_np - vestibular_predicted_seq) ** 2)
+    beat_error = np.mean((beat_np - beat_predicted_seq) ** 2)
 
-    # Time axis
-    n_steps = len(beat_seq)
-    t = list(range(n_steps))
-
-    # Create subplots: 3 rows, 1 column
-    fig = make_subplots(
-        rows=3, cols=1,
-        subplot_titles=["Beat Sequence", "Predicted Beat", "Error of Predicted Beat"],
-        shared_xaxes=True,  # so x-zoom is shared
-        vertical_spacing=0.05  # Reduced spacing to allow for larger plots
-    )
-
-    # --- Row 1: Beat Sequence ---
-    fig.add_trace(
-        go.Scatter(
-            x=t,
-            y=beat_seq.cpu().numpy(),  # use .cpu() if on GPU
-            mode='lines+markers',
-            name='Beat',
-            marker=dict(color='red')
-        ),
-        row=1, col=1
-    )
-
-    # --- Row 2: Predicted Beat Sequence ---
-    fig.add_trace(
-        go.Scatter(
-            x=t,
-            y=beat_predicted_seq,  # use .cpu() if on GPU
-            mode='lines+markers',
-            name='Predicted Beat',
-            marker=dict(color='purple')
-        ),
-        row=2, col=1
-    )
-
-    # --- Row 3: Error of Predicted Beat ---
-    fig.add_trace(
-        go.Scatter(
-            x=t,
-            y=e_b_seq,  # use .cpu() if on GPU
-            mode='lines+markers',
-            name='Error of Predicted Beat',
-            line=dict(dash='dash', color='purple'),
-            marker=dict(color='purple')
-        ),
-        row=3, col=1
-    )
-
-    # Add vertical lines at beat times on all rows
-    beat_times = [i for i, beat in enumerate(beat_seq) if beat.item() > 0]
-    for b in beat_times:
-        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=1, col=1)
-        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=2, col=1)
-        fig.add_vline(x=b, line_width=1, line_dash='dash', line_color='red', row=3, col=1)
-
-    # Layout settings with increased height
-    fig.update_layout(
-        title='Beat Inference Results',
-        height=800,
-        showlegend=True
-    )
-
-    # Additional subplot adjustments for larger row heights
-    for i in range(1, 4):
-        fig.update_yaxes(
-            title_text=f"Row {i}",
-            row=i, col=1,
-            automargin=True  # Give more margin for better visibility
-        )
-
-    # Save interactive HTML (dynamic)
-    fig.write_html(str(save_path_html), auto_open=False)
-    print(f"Interactive Plotly figure saved to: {save_path_html}")
-
-    # Optionally, save a high-res static PNG (requires kaleido).
-    if save_path_png is not None:
-        # scale=2 or higher for increased resolution
-        fig.write_image(str(save_path_png), scale=3)
-        print(f"High-resolution PNG saved to: {save_path_png}")
+    return float(vest_error), float(beat_error)
 
 
-def test_sensorimotor_model(config_path: Path, args):
+def test_sensorimotor_model(
+    config_path: Path,
+    model_step: int,
+    tempo: float,
+    continuation: bool,
+    prediction_timing: str,
+    logger: ExperimentLogger,
+) -> None:
+    """
+    Test a trained sensorimotor model and generate plots.
 
+    Args:
+        config_path: Path to experiment config file
+        model_step: Which model checkpoint to load
+        tempo: Tempo to use for testing
+        continuation: Whether to enable continuation mode
+        prediction_timing: "before" or "after" inference optimization
+        logger: ExperimentLogger for logging test results
+    """
     exp_dir = config_path.parent
 
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
     # Create plots directory
-    plots_dir = exp_dir / 'inference_plots'
+    plots_dir = exp_dir / "inference_plots"
     plots_dir.mkdir(exist_ok=True)
 
     # Initialize network
     network = SensorimotorPCRNN(
-        associative_size=config['network']['associative_size'],
-        vestibular_size=config['network']['vestibular_size'],
-        inference_learning_rate=config['network']['inference_learning_rate'],
-        weight_learning_rate=config['network']['weight_learning_rate'],
-        n_inference_steps=config['network']['n_inference_steps'],
-        random_seed=config['experiment']['random_seed']
+        associative_size=config["network"]["associative_size"],
+        vestibular_size=config["network"]["vestibular_size"],
+        inference_learning_rate=config["network"]["inference_learning_rate"],
+        weight_learning_rate=config["network"]["weight_learning_rate"],
+        n_inference_steps=config["network"]["n_inference_steps"],
+        random_seed=config["experiment"]["random_seed"],
     )
 
     # Load saved model
-    checkpoint = torch.load(exp_dir / f'model_step_{args.model_step}.pt')
-    network.load_state_dict(checkpoint['model_state_dict'])
+    checkpoint = torch.load(exp_dir / f"model_step_{model_step}.pt")
+    network.load_state_dict(checkpoint["model_state_dict"])
+
+    # Log testing start
+    logger.log_testing_start(
+        model_step=model_step,
+        tempo=tempo,
+        continuation=continuation,
+        prediction_timing=prediction_timing,
+    )
 
     # Generate test sequences
     vestibular_seq, beat_seq = generate_input_sequences(
-        tempo=config['experiment']['tempo'],
-        dt=config['experiment']['dt'],
-        duration=config['testing']['test_duration'],
-        vestibular_size=config['network']['vestibular_size'],
+        tempo=tempo,
+        dt=config["experiment"]["dt"],
+        duration=config["testing"]["test_duration"],
+        vestibular_size=config["network"]["vestibular_size"],
         mode=config["experiment"]["mode"],
     )
 
     # Run inference
-    network.reset_states()
-    vestibular_predicted_seq = []
-    beat_predicted_seq = []
-    e_v_seq = []
-    e_b_seq = []
-
-    continuation = bool(args.continuation)
-    for step, (vestibular, beat) in enumerate(zip(vestibular_seq, beat_seq)):
-        continuation_flag = continuation and (step > 0.5 * len(vestibular_seq))
-        vestibular_pred, beat_pred, e_v, e_b = network.timestep_inference(
-            vestibular_input=vestibular,
-            beat_input=beat,
-            continuation=continuation_flag
-        )
-
-        vestibular_predicted_seq.append(vestibular_pred.squeeze().tolist())
-        beat_predicted_seq.append(beat_pred.squeeze().tolist())
-        e_v_seq.append(e_v.squeeze().tolist())
-        e_b_seq.append(e_b.squeeze().tolist())
-
-    vestibular_predicted_seq = np.array(vestibular_predicted_seq)
-    beat_predicted_seq = np.array(beat_predicted_seq)
-    e_v_seq = np.array(e_v_seq)
-    e_b_seq = np.array(e_b_seq)
-
-    # Plot and save results
-    plot_path_html = plots_dir / f'inference_plot_step_{args.model_step}.html'
-    plot_path_png = plots_dir / f'inference_plot_step_{args.model_step}.png'
-    plot_inference_sequence_sensorimotor(
-        vestibular_seq,
-        beat_seq,
-        vestibular_predicted_seq,
-        beat_predicted_seq,
-        e_v_seq,
-        e_b_seq,
-        plot_path_html,
-        plot_path_png,
+    vestibular_predicted_seq, beat_predicted_seq, e_v_seq, e_b_seq = run_inference(
+        network=network,
+        vestibular_seq=vestibular_seq,
+        beat_seq=beat_seq,
+        continuation=continuation,
     )
 
-    print(f"Generated plot saved at: {plots_dir}")
+    # Calculate errors
+    avg_vest_error, avg_beat_error = calculate_test_errors(
+        vestibular_seq=vestibular_seq,
+        beat_seq=beat_seq,
+        vestibular_predicted_seq=vestibular_predicted_seq,
+        beat_predicted_seq=beat_predicted_seq,
+    )
+
+    # Generate filenames
+    html_filename = generate_plot_filename(
+        model_step=model_step,
+        tempo=tempo,
+        prediction_timing=prediction_timing,
+        continuation=continuation,
+        extension="html",
+    )
+    png_filename = generate_plot_filename(
+        model_step=model_step,
+        tempo=tempo,
+        prediction_timing=prediction_timing,
+        continuation=continuation,
+        extension="png",
+    )
+
+    plot_path_html = plots_dir / html_filename
+    plot_path_png = plots_dir / png_filename
+
+    # Plot and save results
+    plot_inference_sequence_sensorimotor(
+        vestibular_seq=vestibular_seq,
+        beat_seq=beat_seq,
+        vestibular_predicted_seq=vestibular_predicted_seq,
+        beat_predicted_seq=beat_predicted_seq,
+        e_v_seq=e_v_seq,
+        e_b_seq=e_b_seq,
+        save_path_html=plot_path_html,
+        save_path_png=plot_path_png,
+    )
+
+    # Log completion
+    logger.log_testing_complete(
+        vest_error=avg_vest_error, beat_error=avg_beat_error, plot_path=plot_path_html
+    )
 
 
-def test_and_plot():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, required=True,
-                        help='Path to saved config file')
-    parser.add_argument('--model_step', type=int, required=True,
-                        help='Which saved model step to load')
-    parser.add_argument('--continuation',
-                        action='store_true', help='Also include continuation phase?')
+def test_and_plot() -> None:
+    """
+    Main testing entry point.
+
+    Parses command line arguments and runs testing for all configured tempos.
+    """
+    parser = argparse.ArgumentParser(
+        description="Test trained sensorimotor network and generate plots"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="Path to saved config file in experiment directory",
+    )
+    parser.add_argument(
+        "--model_step", type=int, required=True, help="Which saved model step to load"
+    )
+    parser.add_argument(
+        "--continuation",
+        action="store_true",
+        help="Enable continuation mode (no auditory input after 50%% of sequence)",
+    )
+    parser.add_argument(
+        "--prediction_timing",
+        type=str,
+        choices=["before", "after"],
+        default="after",
+        help="When to capture predictions: before or after inference optimization",
+    )
     args = parser.parse_args()
 
     # Load config
     config_path = Path(args.config)
+    exp_dir = config_path.parent
 
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
-    if config['experiment']['mode'] == 'beat':
-        pass
-    elif config['experiment']['mode'] == 'sensorimotor' or config['experiment']['mode'] == 'doublebeat':
-        test_sensorimotor_model(config_path, args)
+    # Initialize logger for testing
+    log_level = config.get("logging", {}).get("level", "INFO")
+    logger = create_logger(exp_dir=exp_dir, log_filename="testing.log", level=log_level)
+
+    logger.info("=" * 60)
+    logger.info("TESTING STARTED")
+    logger.info(f"Model step: {args.model_step}")
+    logger.info(f"Continuation: {args.continuation}")
+    logger.info(f"Prediction timing: {args.prediction_timing}")
+    logger.info("=" * 60)
+
+    # Get tempos to test
+    tempo_values = get_tempo_values(config)
+    logger.info(f"Testing tempos: {tempo_values}")
+
+    # Run tests for each tempo
+    mode = config["experiment"]["mode"]
+
+    if mode in {"sensorimotor", "doublebeat"}:
+        for tempo in tempo_values:
+            test_sensorimotor_model(
+                config_path=config_path,
+                model_step=args.model_step,
+                tempo=tempo,
+                continuation=args.continuation,
+                prediction_timing=args.prediction_timing,
+                logger=logger,
+            )
+    else:
+        raise ValueError(f"Unknown experiment mode: {mode}")
+
+    logger.info("=" * 60)
+    logger.info("TESTING COMPLETED")
+    logger.info("=" * 60)
 
 
 if __name__ == "__main__":

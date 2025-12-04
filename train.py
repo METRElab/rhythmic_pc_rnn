@@ -1,80 +1,141 @@
+"""
+Training script for the sensorimotor predictive coding network.
+
+Trains the network on paired auditory-vestibular input to learn
+rhythm prediction and cross-modal associations.
+"""
+
 import argparse
+from typing import Dict, Any, Tuple
+
 import numpy as np
 
 from network import SensorimotorPCRNN
-from utils import ExperimentManager, generate_input_sequences
+from utils import (
+    ExperimentManager,
+    generate_input_sequences,
+    sample_tempo,
+    get_tempo_values,
+)
 
 
-def calc_inference_err_sensorimotor(network, config):
-    """Run inference testing and log results."""
-    # Generate test sequences
-    test_vestibular_seq, test_beat_seq = generate_input_sequences(
-        tempo=config['experiment']['tempo'],
-        dt=config['experiment']['dt'],
-        duration=config['testing']['test_duration'],
-        vestibular_size=config['network']['vestibular_size'],
-        mode=config['experiment']['mode']
-    )
+def calc_inference_error_sensorimotor(
+    network: SensorimotorPCRNN, config: Dict[str, Any], n_inference_rounds: int = 1
+) -> Tuple[float, float]:
+    """
+    Calculate inference error over multiple test rounds.
 
-    total_vest_error = 0
+    Runs inference with different tempos (if range mode) and computes
+    average prediction errors for both vestibular and beat signals.
+
+    Args:
+        network: Trained SensorimotorPCRNN network
+        config: Experiment configuration dictionary
+        n_inference_rounds: Number of inference rounds to average over
+
+    Returns:
+        Tuple of (avg_vest_inference_error, avg_beat_inference_error)
+    """
+    total_vest_error = 0.0
+    total_beat_error = 0.0
     total_steps = 0
 
-    # Run multiple inference rounds
-    for _ in range(config['testing']['n_inference_rounds']):
+    for _ in range(n_inference_rounds):
         network.reset_states()
-        vestibular_preds = []
 
+        # Sample tempo for this inference round
+        tempo = sample_tempo(config)
+
+        # Generate test sequences
+        test_vestibular_seq, test_beat_seq = generate_input_sequences(
+            tempo=tempo,
+            dt=config["experiment"]["dt"],
+            duration=config["testing"]["test_duration"],
+            vestibular_size=config["network"]["vestibular_size"],
+            mode=config["experiment"]["mode"],
+        )
+
+        # Run inference for each timestep
         for vestibular, beat in zip(test_vestibular_seq, test_beat_seq):
-            # Run inference with only beat input
-            vestibular_pred, _, _, _ = network.timestep_inference(vestibular_input=vestibular, beat_input=beat)
-            vestibular_preds.append(vestibular_pred)
+            vestibular_pred, beat_pred, _, _ = network.timestep_inference(
+                vestibular_input=vestibular, beat_input=beat
+            )
 
             # Accumulate error
             total_vest_error += ((vestibular - vestibular_pred) ** 2).sum().item()
+            total_beat_error += ((beat - beat_pred) ** 2).sum().item()
             total_steps += 1
 
-    # Log average inference error
-    avg_inference_error = total_vest_error / total_steps
-    return avg_inference_error
+    # Calculate averages
+    avg_vest_inference_error = total_vest_error / total_steps
+    avg_beat_inference_error = total_beat_error / total_steps
+
+    return avg_vest_inference_error, avg_beat_inference_error
 
 
-def train_sensorimotor(exp_manager: ExperimentManager):
+def train_sensorimotor(exp_manager: ExperimentManager) -> None:
+    """
+    Train the sensorimotor predictive coding network.
 
+    Trains on paired vestibular-auditory input, logging metrics and
+    saving model checkpoints when inference error improves.
+
+    Args:
+        exp_manager: ExperimentManager instance for logging and saving
+    """
     config = exp_manager.config
 
     # Create network
     network = SensorimotorPCRNN(
-        associative_size=config['network']['associative_size'],
-        vestibular_size=config['network']['vestibular_size'],
-        inference_learning_rate=config['network']['inference_learning_rate'],
-        weight_learning_rate=config['network']['weight_learning_rate'],
-        n_inference_steps=config['network']['n_inference_steps'],
-        random_seed=config["experiment"]["random_seed"]
+        associative_size=config["network"]["associative_size"],
+        vestibular_size=config["network"]["vestibular_size"],
+        inference_learning_rate=config["network"]["inference_learning_rate"],
+        weight_learning_rate=config["network"]["weight_learning_rate"],
+        n_inference_steps=config["network"]["n_inference_steps"],
+        random_seed=config["experiment"]["random_seed"],
     )
 
-    # Generate input sequences
-    vestibular_seq, beat_seq = generate_input_sequences(
-        tempo=config['experiment']['tempo'],
-        dt=config['experiment']['dt'],
-        duration=config['experiment']['duration'],
-        vestibular_size=config['network']['vestibular_size'],
-        mode=config['experiment']['mode']
-    )
+    # Log tempo configuration
+    tempo_values = get_tempo_values(config)
+    exp_manager.logger.info(f"Training with tempos: {tempo_values}")
 
-    # Training loop
-    n_steps = len(beat_seq)
+    # Calculate steps per round (using first tempo for reference)
+    reference_tempo = tempo_values[0]
+    _, reference_beat_seq = generate_input_sequences(
+        tempo=reference_tempo,
+        dt=config["experiment"]["dt"],
+        duration=config["experiment"]["duration"],
+        vestibular_size=config["network"]["vestibular_size"],
+        mode=config["experiment"]["mode"],
+    )
+    n_steps_per_round = len(reference_beat_seq)
 
     # Initialize error accumulators
-    accumulated_vest_error = 0
-    accumulated_beat_error = 0
+    accumulated_vest_error = 0.0
+    accumulated_beat_error = 0.0
     steps_since_last_log = 0
-    min_avg_inference_error = np.inf
+    min_avg_vest_inference_error = np.inf
 
-    for round in range(config['experiment']['n_training_rounds']):
+    # Training loop
+    for round_idx in range(config["experiment"]["n_training_rounds"]):
         network.reset_states()
 
+        # Sample tempo for this training round
+        tempo = sample_tempo(config)
+
+        # Generate input sequences for this round
+        vestibular_seq, beat_seq = generate_input_sequences(
+            tempo=tempo,
+            dt=config["experiment"]["dt"],
+            duration=config["experiment"]["duration"],
+            vestibular_size=config["network"]["vestibular_size"],
+            mode=config["experiment"]["mode"],
+        )
+
+        n_steps = len(beat_seq)
+
         for step in range(n_steps):
-            global_step = round * n_steps + step
+            global_step = round_idx * n_steps_per_round + step
 
             # Get current inputs
             beat = beat_seq[step]
@@ -85,56 +146,68 @@ def train_sensorimotor(exp_manager: ExperimentManager):
 
             # Accumulate errors
             accumulated_vest_error += ((vestibular - vestibular_pred) ** 2).sum().item()
-
-            # if config['experiment']['mode'] == 'sensorimotor':
-            #     accumulated_vest_error += ((vestibular - vestibular_pred) ** 2).sum().item()
-            # elif config['experiment']['mode'] == 'doublebeat':
-            #     accumulated_vest_error += (vestibular - vestibular_pred).item() ** 2
-
             accumulated_beat_error += (beat - beat_pred).item() ** 2
             steps_since_last_log += 1
 
-            # Log metrics
-            if global_step % config['saving']['log_every'] == 0:
-                # Calculate averages
+            # Log metrics periodically
+            if global_step % config["saving"]["log_every"] == 0 and global_step > 0:
+                # Calculate average training errors
                 avg_vest_error = accumulated_vest_error / steps_since_last_log
                 avg_beat_error = accumulated_beat_error / steps_since_last_log
-                avg_inference_error = calc_inference_err_sensorimotor(network, config)
 
-                # Log training metrics
+                # Calculate inference errors
+                avg_vest_inference_error, avg_beat_inference_error = (
+                    calc_inference_error_sensorimotor(network, config)
+                )
+
+                # Log metrics
                 metrics = {
-                    'vest_error': avg_vest_error,
-                    'beat_error': avg_beat_error,
-                    'inference_error': avg_inference_error
+                    "vest_error": avg_vest_error,
+                    "beat_error": avg_beat_error,
+                    "vest_inference_error": avg_vest_inference_error,
+                    "beat_inference_error": avg_beat_inference_error,
                 }
                 exp_manager.log_metrics(metrics, global_step)
 
-                # Run inference testing
-
                 # Reset accumulators
-                accumulated_vest_error = 0
-                accumulated_beat_error = 0
+                accumulated_vest_error = 0.0
+                accumulated_beat_error = 0.0
                 steps_since_last_log = 0
 
-                # Save model periodically
-                if avg_inference_error < min_avg_inference_error:
-                    # min_avg_inference_error = copy.deepcopy(avg_inference_error)
-                    min_avg_inference_error = avg_inference_error
+                # Save model if inference error improved
+                if avg_vest_inference_error < min_avg_vest_inference_error:
+                    min_avg_vest_inference_error = avg_vest_inference_error
                     exp_manager.save_model(network, global_step)
 
+    # Finish experiment
+    exp_manager.finish()
 
-def train():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, required=True, help='Path to config file')
+
+def train() -> None:
+    """
+    Main training entry point.
+
+    Parses command line arguments and starts training based on
+    experiment mode specified in config.
+    """
+    parser = argparse.ArgumentParser(
+        description="Train sensorimotor predictive coding network"
+    )
+    parser.add_argument("--config", type=str, required=True, help="Path to config file")
     args = parser.parse_args()
 
     # Initialize experiment
     exp_manager = ExperimentManager(args.config)
 
-    if exp_manager.config['experiment']['mode'] in {"sensorimotor", "doublebeat"}:
+    # Start training based on mode
+    mode = exp_manager.config["experiment"]["mode"]
+
+    if mode in {"sensorimotor", "doublebeat"}:
         train_sensorimotor(exp_manager)
-    elif exp_manager.config['experiment']['mode'] == "beat":
-        pass
+    else:
+        raise ValueError(
+            f"Unknown experiment mode: {mode}. Must be 'sensorimotor' or 'doublebeat'."
+        )
 
 
 if __name__ == "__main__":
