@@ -258,7 +258,6 @@ class SensorimotorPCRNN(nn.Module):
         self.x = self.Wrec @ torch.tanh(self.x_prev)
 
         # Get predictions before optimizing states
-        _, vestibular_pred_before, beat_pred_before = self.compute_predictions()
 
         # Optimize states
         for _ in range(self.n_inference_steps):
@@ -268,7 +267,9 @@ class SensorimotorPCRNN(nn.Module):
         e_rec, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
         self.update_weights(e_rec, e_v, e_b)
 
-        return vestibular_pred_before, beat_pred_before
+        _, vestibular_pred, beat_pred = self.compute_predictions()
+
+        return vestibular_pred, beat_pred
 
     def timestep_inference(
         self,

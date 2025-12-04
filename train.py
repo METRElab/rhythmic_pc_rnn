@@ -150,7 +150,7 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
             steps_since_last_log += 1
 
             # Log metrics periodically
-            if global_step % config["saving"]["log_every"] == 0 and global_step > 0:
+            if global_step % config["saving"]["log_every"] == 0:
                 # Calculate average training errors
                 avg_vest_error = accumulated_vest_error / steps_since_last_log
                 avg_beat_error = accumulated_beat_error / steps_since_last_log
