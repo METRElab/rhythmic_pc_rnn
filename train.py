@@ -7,8 +7,10 @@ rhythm prediction and cross-modal associations.
 
 import argparse
 from typing import Dict, Any, Tuple
+import random
 
 import numpy as np
+import torch
 
 from network import SensorimotorPCRNN
 from utils import (
@@ -40,31 +42,33 @@ def calc_inference_error_sensorimotor(
     total_beat_error = 0.0
     total_steps = 0
 
-    for _ in range(n_inference_rounds):
-        network.reset_states()
+    tempos = get_tempo_values(config)
+    for tempo in tempos:
+        for _ in range(n_inference_rounds):
+            network.reset_states()
 
-        # Sample tempo for this inference round
-        tempo = sample_tempo(config)
+            # Sample tempo for this inference round
+            # tempo = sample_tempo(config)
 
-        # Generate test sequences
-        test_vestibular_seq, test_beat_seq = generate_input_sequences(
-            tempo=tempo,
-            dt=config["experiment"]["dt"],
-            duration=config["testing"]["test_duration"],
-            vestibular_size=config["network"]["vestibular_size"],
-            mode=config["experiment"]["mode"],
-        )
-
-        # Run inference for each timestep
-        for vestibular, beat in zip(test_vestibular_seq, test_beat_seq):
-            vestibular_pred, beat_pred, _, _ = network.timestep_inference(
-                vestibular_input=vestibular, beat_input=beat
+            # Generate test sequences
+            test_vestibular_seq, test_beat_seq = generate_input_sequences(
+                tempo=tempo,
+                dt=config["experiment"]["dt"],
+                duration=config["testing"]["test_duration"],
+                vestibular_size=config["network"]["vestibular_size"],
+                mode=config["experiment"]["mode"],
             )
 
-            # Accumulate error
-            total_vest_error += ((vestibular - vestibular_pred) ** 2).sum().item()
-            total_beat_error += ((beat - beat_pred) ** 2).sum().item()
-            total_steps += 1
+            # Run inference for each timestep
+            for vestibular, beat in zip(test_vestibular_seq, test_beat_seq):
+                vestibular_pred, beat_pred, _, _ = network.timestep_inference(
+                    vestibular_input=vestibular, beat_input=beat
+                )
+
+                # Accumulate error
+                total_vest_error += ((vestibular - vestibular_pred) ** 2).sum().item()
+                total_beat_error += ((beat - beat_pred) ** 2).sum().item()
+                total_steps += 1
 
     # Calculate averages
     avg_vest_inference_error = total_vest_error / total_steps
@@ -84,6 +88,12 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
         exp_manager: ExperimentManager instance for logging and saving
     """
     config = exp_manager.config
+
+    # Setting random seed for all libraries
+    seed = config["experiment"]["random_seed"]
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
     # Create network
     network = SensorimotorPCRNN(

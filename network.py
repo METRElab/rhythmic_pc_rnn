@@ -276,6 +276,7 @@ class SensorimotorPCRNN(nn.Module):
         vestibular_input: torch.Tensor,
         beat_input: torch.Tensor,
         continuation: bool = False,
+        prediction_timing: str = "after"
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Process one inference timestep with only beat input driving the network.
@@ -287,6 +288,7 @@ class SensorimotorPCRNN(nn.Module):
             vestibular_input: Vestibular input (used for error computation only)
             beat_input: Beat sensory input
             continuation: If True, run without any sensory input (internal continuation)
+            prediction_timing: "before" or "after" inference optimization
 
         Returns:
             Tuple of (vestibular_pred, beat_pred, e_v, e_b):
@@ -301,6 +303,10 @@ class SensorimotorPCRNN(nn.Module):
         self.x_prev = self.x.clone()
         self.x = self.Wrec @ torch.tanh(self.x_prev)
 
+        # Get predictions before inference
+        _, vestibular_pred_before, beat_pred_before = self.compute_predictions()
+        _, e_v_before, e_b_before = self.compute_prediction_errors(vestibular_input, beat_input)
+
         # Optimize states using only beat input (or nothing in continuation)
         for _ in range(self.n_inference_steps):
             if continuation:
@@ -309,7 +315,12 @@ class SensorimotorPCRNN(nn.Module):
                 self.optimize_states(None, beat_input)
 
         # Get predictions after inference
-        _, vestibular_pred, beat_pred = self.compute_predictions()
-        _, e_v, e_b = self.compute_prediction_errors(vestibular_input, beat_input)
+        _, vestibular_pred_after, beat_pred_after = self.compute_predictions()
+        _, e_v_after, e_b_after = self.compute_prediction_errors(vestibular_input, beat_input)
 
-        return vestibular_pred, beat_pred, e_v, e_b
+        if prediction_timing == "before":
+            return vestibular_pred_before, beat_pred_before, e_v_before, e_b_before
+        if prediction_timing == "after":
+            return vestibular_pred_after, beat_pred_after, e_v_after, e_b_after
+        else:
+            raise ValueError("prediction_timing must be 'before' or 'after'")

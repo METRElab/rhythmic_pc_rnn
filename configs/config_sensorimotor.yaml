@@ -6,11 +6,11 @@ experiment:
   name: "sensorimotor_exp"    # experiment name (timestamp will be appended)
   random_seed: 164            # random seed for weight initialization
   tempo:
-    mode: "single"             # "single" or "range"
+    mode: "range"             # "single" or "range"
     value: 0.5                # used when mode is "single"
-    min: 0.4                  # used when mode is "range"
-    max: 0.8                  # used when mode is "range"
-    step: 0.1                 # discrete steps for range mode
+    min: 0.45                  # used when mode is "range"
+    max: 0.55                  # used when mode is "range"
+    step: 0.05                 # discrete steps for range mode
 
 network:
   associative_size: 60        # size of associative layer
