@@ -105,6 +105,10 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
         random_seed=config["experiment"]["random_seed"],
     )
 
+    if config["experiment"]["retrain"]:
+        checkpoint = torch.load(config["experiment"]["checkpoint_path"])
+        network.load_state_dict(checkpoint["model_state_dict"])
+
     # Log tempo configuration
     tempo_values = get_tempo_values(config)
     exp_manager.logger.info(f"Training with tempos: {tempo_values}")
