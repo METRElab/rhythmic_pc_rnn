@@ -14,8 +14,10 @@ import copy
 from pathlib import Path
 import time
 from typing import Dict, Any
+import random
 
 import numpy as np
+import torch
 
 from network import SensorimotorPCRNN
 from utils import ExperimentManager, generate_input_sequences, sample_tempo
@@ -46,19 +48,19 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     config['experiment']['random_seed'] = trial.suggest_int('random_seed', 1, 1000)
 
     # Layer sizes
-    config['network']['higher_size'] = trial.suggest_int('higher_size', 0, 16)
-    config['network']['associative_size'] = trial.suggest_int('associative_size', 8, 64)
+    config['network']['higher_size'] = trial.suggest_int('higher_size', 0, 4)
+    config['network']['associative_size'] = trial.suggest_int('associative_size', 16, 64, step=4)
 
     # Timescales
     config['network']['alpha_H'] = trial.suggest_float('alpha_H', 0.01, 0.5, log=True)
-    config['network']['alpha_x'] = trial.suggest_float('alpha_x', 0.1, 1.0)
+    config['network']['alpha_x'] = trial.suggest_float('alpha_x', 0.1, 1.0, step=0.1)
 
     # Inference learning rates
     config['network']['inference_learning_rate_H'] = trial.suggest_float(
         'inference_learning_rate_H', 0.01, 0.5, log=True
     )
     config['network']['inference_learning_rate_x'] = trial.suggest_float(
-        'inference_learning_rate_x', 0.01, 0.5, log=True
+        'inference_learning_rate_x', 0.001, 0.5, log=True
     )
 
     # Weight learning rates
@@ -66,11 +68,11 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
         'weight_learning_rate_H', 0.001, 0.5, log=True
     )
     config['network']['weight_learning_rate_x'] = trial.suggest_float(
-        'weight_learning_rate_x', 0.01, 0.5, log=True
+        'weight_learning_rate_x', 0.001, 0.5, log=True
     )
 
     # Inference steps
-    config['network']['n_inference_steps'] = trial.suggest_int('n_inference_steps', 5, 50)
+    config['network']['n_inference_steps'] = trial.suggest_int('n_inference_steps', 5, 50, step=5)
 
     # Reduce the number of training rounds for faster tuning
     config['experiment']['n_training_rounds'] = 100
@@ -82,6 +84,12 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     temp_config_path = f"temp_config_trial_{trial.number}.yaml"
     with open(temp_config_path, 'w') as f:
         yaml.dump(config, f)
+
+    # Setting random seed for all libraries
+    seed = config["experiment"]["random_seed"]
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
     try:
         exp_manager = ExperimentManager(temp_config_path)

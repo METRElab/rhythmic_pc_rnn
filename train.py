@@ -7,8 +7,10 @@ rhythm prediction and cross-modal associations.
 
 import argparse
 from typing import Dict, Any, Tuple
+import random
 
 import numpy as np
+import torch
 
 from network import SensorimotorPCRNN
 from utils import (
@@ -105,6 +107,13 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
         exp_manager: ExperimentManager instance for logging and saving
     """
     config = exp_manager.config
+
+    # Setting random seed for all libraries
+    seed = config["experiment"]["random_seed"]
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
     net_config = config['network']
 
     # Create network
