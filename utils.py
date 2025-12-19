@@ -9,7 +9,7 @@ import torch
 import yaml
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List, Tuple, Union
+from typing import Dict, Any, List, Tuple, Union, Optional
 from torch.utils.tensorboard import SummaryWriter
 
 from logger import ExperimentLogger, create_logger
@@ -31,18 +31,17 @@ def get_tempo_values(config: Dict[str, Any]) -> List[float]:
     Raises:
         ValueError: If tempo mode is not 'single' or 'range'
     """
-    tempo_config = config["experiment"]["tempo"]
-    mode = tempo_config["mode"]
+    tempo_config = config['experiment']['tempo']
+    mode = tempo_config['mode']
 
-    if mode == "single":
-        return [tempo_config["value"]]
-    elif mode == "range":
-        min_tempo = tempo_config["min"]
-        max_tempo = tempo_config["max"]
-        step = tempo_config["step"]
+    if mode == 'single':
+        return [tempo_config['value']]
+    elif mode == 'range':
+        min_tempo = tempo_config['min']
+        max_tempo = tempo_config['max']
+        step = tempo_config['step']
 
         # Generate discrete tempo values
-        # Use round to avoid floating point precision issues
         n_steps = int(round((max_tempo - min_tempo) / step)) + 1
         tempos = [round(min_tempo + i * step, 4) for i in range(n_steps)]
         return tempos
@@ -76,7 +75,7 @@ def generate_input_sequences(
     dt: float,
     duration: float,
     vestibular_size: int = 1,
-    mode: str = "sensorimotor",
+    mode: str = "sensorimotor"
 ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
     """
     Generate synchronized beat and vestibular sequences.
@@ -105,7 +104,7 @@ def generate_input_sequences(
     # Beat sequence: binary pulse train
     beat_times = np.arange(0, duration, tempo)
     beat_indices = (beat_times / dt).astype(int)
-    beat_indices = beat_indices[beat_indices < n_steps]  # Ensure within bounds
+    beat_indices = beat_indices[beat_indices < n_steps]
     beat_sequence = np.zeros(n_steps)
     beat_sequence[beat_indices] = 1
 
@@ -119,24 +118,14 @@ def generate_input_sequences(
         return beat_sequence, beat_sequence
 
     elif mode == "sensorimotor":
-        # Frequency for vestibular wave
         frequency = 1 / tempo
-
-        # Create triangular wave with period matching the tempo
-        # Sawtooth: goes from -1 to 1 over each period
         sawtooth = 2 * (t * frequency - np.floor(0.5 + t * frequency))
-
-        # Convert to triangular wave: peaks at beat times
         vestibular_tri = 1 - 2 * np.abs(sawtooth)
-
         vestibular_sequence = torch.FloatTensor(vestibular_tri)
-
         return vestibular_sequence, beat_sequence
 
     else:
-        raise ValueError(
-            f"Unknown mode: {mode}. Must be 'sensorimotor', 'doublebeat', or 'beat'."
-        )
+        raise ValueError(f"Unknown mode: {mode}. Must be 'sensorimotor', 'doublebeat', or 'beat'.")
 
 
 class ExperimentManager:
@@ -151,6 +140,7 @@ class ExperimentManager:
         exp_dir: Path to experiment directory
         writer: TensorBoard SummaryWriter
         logger: ExperimentLogger for file/console logging
+        use_hierarchy: Whether the network uses hierarchical layers
     """
 
     def __init__(self, config_path: str) -> None:
@@ -167,31 +157,34 @@ class ExperimentManager:
         with open(config_path) as f:
             self.config: Dict[str, Any] = yaml.safe_load(f)
 
+        # Check if hierarchy is enabled
+        self.use_hierarchy = self.config['network']['higher_size'] > 0
+
         # Add timestamp to experiment name
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.config["experiment"][
-            "name"
-        ] = f"{self.config['experiment']['name']}_{timestamp}"
+        self.config['experiment']['name'] = f"{self.config['experiment']['name']}_{timestamp}"
 
         # Create experiment directory
         self.exp_dir: Path = (
-            Path(self.config["saving"]["base_dir"])
-            / self.config["experiment"]["mode"]
-            / self.config["experiment"]["name"]
+            Path(self.config['saving']['base_dir']) /
+            self.config["experiment"]["mode"] /
+            self.config['experiment']['name']
         )
         self.exp_dir.mkdir(parents=True, exist_ok=True)
 
         # Save config to experiment directory
-        with open(self.exp_dir / "config.yaml", "w") as f:
+        with open(self.exp_dir / 'config.yaml', 'w') as f:
             yaml.dump(self.config, f)
 
         # Initialize TensorBoard writer
-        self.writer: SummaryWriter = SummaryWriter(self.exp_dir / "logs")
+        self.writer: SummaryWriter = SummaryWriter(self.exp_dir / 'logs')
 
         # Initialize file logger
-        log_level = self.config.get("logging", {}).get("level", "INFO")
+        log_level = self.config.get('logging', {}).get('level', 'INFO')
         self.logger: ExperimentLogger = create_logger(
-            exp_dir=self.exp_dir, log_filename="training.log", level=log_level
+            exp_dir=self.exp_dir,
+            log_filename="training.log",
+            level=log_level
         )
 
         # Log experiment start
@@ -208,20 +201,21 @@ class ExperimentManager:
         Returns:
             Path to saved model file
         """
-        save_path = self.exp_dir / f"model_step_{step}.pt"
-        torch.save(
-            {
-                "step": step,
-                "model_state_dict": model.state_dict(),
-                "config": self.config,
-            },
-            save_path,
-        )
+        save_path = self.exp_dir / f'model_step_{step}.pt'
+        torch.save({
+            'step': step,
+            'model_state_dict': model.state_dict(),
+            'config': self.config
+        }, save_path)
 
         self.logger.log_model_saved(step, save_path)
         return save_path
 
-    def log_metrics(self, metrics: Dict[str, float], step: int) -> None:
+    def log_metrics(
+        self,
+        metrics: Dict[str, float],
+        step: int
+    ) -> None:
         """
         Log metrics to TensorBoard and file logger.
 
@@ -233,16 +227,29 @@ class ExperimentManager:
         for name, value in metrics.items():
             self.writer.add_scalar(name, value, step)
 
-        # Log to file logger with full training step format
+        # Prepare optional H metrics
+        H_error = metrics.get('H_error') if self.use_hierarchy else None
+        H_inference_error = metrics.get('H_inference_error') if self.use_hierarchy else None
+
+        # Log to file logger
         self.logger.log_training_step(
             step=step,
-            vest_error=metrics.get("vest_error", 0.0),
-            beat_error=metrics.get("beat_error", 0.0),
-            vest_inference_error=metrics.get("vest_inference_error", 0.0),
-            beat_inference_error=metrics.get("beat_inference_error", 0.0),
+            vest_error=metrics.get('vest_error', 0.0),
+            beat_error=metrics.get('beat_error', 0.0),
+            x_error=metrics.get('x_error', 0.0),
+            vest_inference_error=metrics.get('vest_inference_error', 0.0),
+            beat_inference_error=metrics.get('beat_inference_error', 0.0),
+            x_inference_error=metrics.get('x_inference_error', 0.0),
+            H_error=H_error,
+            H_inference_error=H_inference_error
         )
 
-    def update_best_metric(self, metric_name: str, value: float, step: int) -> bool:
+    def update_best_metric(
+        self,
+        metric_name: str,
+        value: float,
+        step: int
+    ) -> bool:
         """
         Update best metric tracking.
 
@@ -256,7 +263,7 @@ class ExperimentManager:
         """
         return self.logger.update_best(metric_name, value, step)
 
-    def get_best_metric(self, metric_name: str) -> Dict[str, Any]:
+    def get_best_metric(self, metric_name: str) -> Optional[Dict[str, Any]]:
         """
         Get the best recorded value for a metric.
 

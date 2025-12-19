@@ -13,20 +13,34 @@ experiment:
     step: 0.1                 # discrete steps for range mode
 
 network:
-  associative_size: 60        # size of associative layer (Optuna tuned)
-  inference_learning_rate: 0.049706088801492805  # Optuna tuned
-  n_inference_steps: 34       # Euler integration steps per timestep (Optuna tuned)
-  vestibular_size: 1          # dimension of vestibular input
-  weight_learning_rate: 0.47037325216247716      # Optuna tuned
+  # Layer sizes
+  higher_size: 4              # m units in H (set to 0 to disable hierarchy)
+  associative_size: 60        # n units in x (Optuna tuned)
+  vestibular_size: 1          # vestibular input dimension
+
+  # Timescales (leaky integration)
+  alpha_H: 0.1                # slow timescale for higher layer
+  alpha_x: 0.5                # faster timescale for associative layer
+
+  # Inference learning rates (state optimization within timestep)
+  inference_learning_rate_H: 0.05
+  inference_learning_rate_x: 0.049706088801492805    # Optuna tuned
+
+  # Weight learning rates (Hebbian updates)
+  weight_learning_rate_H: 0.01
+  weight_learning_rate_x: 0.47037325216247716        # Optuna tuned
+
+  # Inference steps
+  n_inference_steps: 34       # Optuna tuned
 
 saving:
-  base_dir: "experiments"     # base directory for saving experiments
-  log_every: 10               # steps between logging
+  base_dir: "experiments"
+  log_every: 10
 
 logging:
-  level: "INFO"               # DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
 
 testing:
-  test_duration: 14.0         # duration of test sequence in seconds
-  continuation: false         # whether to test continuation (no auditory input)
-  prediction_timing: "after"  # "before" or "after" inference optimization
+  test_duration: 14.0
+  continuation: false
+  prediction_timing: "after"

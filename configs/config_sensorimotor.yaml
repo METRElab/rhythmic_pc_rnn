@@ -3,30 +3,68 @@ experiment:
   duration: 10.0              # total duration per training round in seconds
   mode: "sensorimotor"        # "sensorimotor" or "doublebeat"
   n_training_rounds: 1000     # number of training rounds
-  name: "sensorimotor_exp"    # experiment name (timestamp will be appended)
+  name: "sensorimotor_exp_test"    # experiment name (timestamp will be appended)
   random_seed: 164            # random seed for weight initialization
   tempo:
-    mode: "range"             # "single" or "range"
+    mode: "single"             # "single" or "range"
     value: 0.5                # used when mode is "single"
-    min: 0.45                  # used when mode is "range"
-    max: 0.55                  # used when mode is "range"
-    step: 0.05                 # discrete steps for range mode
+    min: 0.4                  # used when mode is "range"
+    max: 0.8                  # used when mode is "range"
+    step: 0.1                 # discrete steps for range mode
 
 network:
-  associative_size: 60        # size of associative layer
-  inference_learning_rate: 0.049706088801492805
-  n_inference_steps: 34       # Euler integration steps per timestep
-  vestibular_size: 1          # dimension of vestibular input
-  weight_learning_rate: 0.47037325216247716
+  # Layer sizes
+  higher_size: 0              # m units in H (set to 0 to disable hierarchy)
+  associative_size: 60        # n units in x
+  vestibular_size: 1          # vestibular input dimension
+
+  # Timescales (leaky integration)
+  alpha_H: 0.1                # slow timescale for higher layer
+  alpha_x: 1                # faster timescale for associative layer
+
+  # Inference learning rates (state optimization within timestep)
+  inference_learning_rate_H: 0.049706088801492805
+  inference_learning_rate_x: 0.049706088801492805
+
+  # Weight learning rates (Hebbian updates)
+  weight_learning_rate_H: 0.47037325216247716    # for W_HH, W_Hx
+  weight_learning_rate_x: 0.47037325216247716    # for W_rec, W_v, W_b
+
+  # Inference steps
+  n_inference_steps: 34
 
 saving:
-  base_dir: "experiments"     # base directory for saving experiments
-  log_every: 10               # steps between logging
+  base_dir: "experiments"
+  log_every: 10
 
 logging:
-  level: "INFO"               # DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
 
 testing:
-  test_duration: 20.0         # duration of test sequence in seconds
-  continuation: false         # whether to test continuation (no auditory input)
-  prediction_timing: "after"  # "before" or "after" inference optimization
+  test_duration: 20.0
+  continuation: false
+  prediction_timing: "after"
+  n_inference_rounds: 1
+
+
+
+#experiment:
+#  dt: 0.05
+#  duration: 10.0
+#  mode: sensorimotor
+#  n_training_rounds: 1000
+#  name: best_params_20250411_173008_trial_460
+#  random_seed: 164
+#  tempo: 0.5
+#network:
+#  associative_size: 60
+#  inference_learning_rate: 0.049706088801492805
+#  n_inference_steps: 34
+#  vestibular_size: 1
+#  weight_learning_rate: 0.47037325216247716
+#saving:
+#  base_dir: experiments
+#  log_every: 10
+#testing:
+#  n_inference_rounds: 1
+#  test_duration: 20.0

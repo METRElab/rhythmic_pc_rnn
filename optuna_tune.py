@@ -2,7 +2,7 @@
 Hyperparameter tuning script using Optuna.
 
 Optimizes network hyperparameters to minimize inference error
-on the sensorimotor prediction task.
+on the hierarchical sensorimotor prediction task.
 """
 
 import argparse
@@ -43,50 +43,73 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     config = copy.deepcopy(base_config)
 
     # Define the hyperparameters to tune
-    config["experiment"]["random_seed"] = trial.suggest_int("random_seed", 1, 1000)
-    config["network"]["associative_size"] = trial.suggest_int("associative_size", 8, 64)
-    config["network"]["inference_learning_rate"] = trial.suggest_float(
-        "inference_learning_rate", 0.01, 0.5, log=True
+    config['experiment']['random_seed'] = trial.suggest_int('random_seed', 1, 1000)
+
+    # Layer sizes
+    config['network']['higher_size'] = trial.suggest_int('higher_size', 0, 16)
+    config['network']['associative_size'] = trial.suggest_int('associative_size', 8, 64)
+
+    # Timescales
+    config['network']['alpha_H'] = trial.suggest_float('alpha_H', 0.01, 0.5, log=True)
+    config['network']['alpha_x'] = trial.suggest_float('alpha_x', 0.1, 1.0)
+
+    # Inference learning rates
+    config['network']['inference_learning_rate_H'] = trial.suggest_float(
+        'inference_learning_rate_H', 0.01, 0.5, log=True
     )
-    config["network"]["weight_learning_rate"] = trial.suggest_float(
-        "weight_learning_rate", 0.01, 0.5, log=True
+    config['network']['inference_learning_rate_x'] = trial.suggest_float(
+        'inference_learning_rate_x', 0.01, 0.5, log=True
     )
-    config["network"]["n_inference_steps"] = trial.suggest_int(
-        "n_inference_steps", 5, 50
+
+    # Weight learning rates
+    config['network']['weight_learning_rate_H'] = trial.suggest_float(
+        'weight_learning_rate_H', 0.001, 0.5, log=True
     )
+    config['network']['weight_learning_rate_x'] = trial.suggest_float(
+        'weight_learning_rate_x', 0.01, 0.5, log=True
+    )
+
+    # Inference steps
+    config['network']['n_inference_steps'] = trial.suggest_int('n_inference_steps', 5, 50)
 
     # Reduce the number of training rounds for faster tuning
-    config["experiment"]["n_training_rounds"] = 100
+    config['experiment']['n_training_rounds'] = 100
 
     # Create a temporary experiment name for this trial
-    config["experiment"]["name"] = f"optuna_trial_{trial.number}"
+    config['experiment']['name'] = f"optuna_trial_{trial.number}"
 
     # Initialize experiment manager with the modified config
     temp_config_path = f"temp_config_trial_{trial.number}.yaml"
-    with open(temp_config_path, "w") as f:
+    with open(temp_config_path, 'w') as f:
         yaml.dump(config, f)
 
     try:
         exp_manager = ExperimentManager(temp_config_path)
+        net_config = config['network']
 
         # Create network with trial parameters
         network = SensorimotorPCRNN(
-            associative_size=config["network"]["associative_size"],
-            vestibular_size=config["network"]["vestibular_size"],
-            inference_learning_rate=config["network"]["inference_learning_rate"],
-            weight_learning_rate=config["network"]["weight_learning_rate"],
-            n_inference_steps=config["network"]["n_inference_steps"],
-            random_seed=config["experiment"]["random_seed"],
+            higher_size=net_config['higher_size'],
+            associative_size=net_config['associative_size'],
+            vestibular_size=net_config['vestibular_size'],
+            alpha_H=net_config['alpha_H'],
+            alpha_x=net_config['alpha_x'],
+            inference_learning_rate_H=net_config['inference_learning_rate_H'],
+            inference_learning_rate_x=net_config['inference_learning_rate_x'],
+            weight_learning_rate_H=net_config['weight_learning_rate_H'],
+            weight_learning_rate_x=net_config['weight_learning_rate_x'],
+            n_inference_steps=net_config['n_inference_steps'],
+            random_seed=config["experiment"]["random_seed"]
         )
 
         # Generate initial input sequences for step counting
         initial_tempo = sample_tempo(config)
         _, beat_seq = generate_input_sequences(
             tempo=initial_tempo,
-            dt=config["experiment"]["dt"],
-            duration=config["experiment"]["duration"],
-            vestibular_size=config["network"]["vestibular_size"],
-            mode=config["experiment"]["mode"],
+            dt=config['experiment']['dt'],
+            duration=config['experiment']['duration'],
+            vestibular_size=net_config['vestibular_size'],
+            mode=config['experiment']['mode']
         )
         n_steps_per_round = len(beat_seq)
 
@@ -97,7 +120,7 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
         min_inference_error = np.inf
 
         # Training loop
-        for round_idx in range(config["experiment"]["n_training_rounds"]):
+        for round_idx in range(config['experiment']['n_training_rounds']):
             network.reset_states()
 
             # Sample tempo for this round
@@ -106,10 +129,10 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
             # Generate input sequences
             vestibular_seq, beat_seq = generate_input_sequences(
                 tempo=tempo,
-                dt=config["experiment"]["dt"],
-                duration=config["experiment"]["duration"],
-                vestibular_size=config["network"]["vestibular_size"],
-                mode=config["experiment"]["mode"],
+                dt=config['experiment']['dt'],
+                duration=config['experiment']['duration'],
+                vestibular_size=net_config['vestibular_size'],
+                mode=config['experiment']['mode']
             )
 
             n_steps = len(beat_seq)
@@ -122,20 +145,17 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
                 vestibular = vestibular_seq[step]
 
                 # Training step
-                vestibular_pred, beat_pred = network.timestep_train(vestibular, beat)
+                result = network.timestep_train(vestibular, beat)
 
                 # Accumulate errors
-                accumulated_vest_error += (
-                    ((vestibular - vestibular_pred) ** 2).sum().item()
-                )
-                accumulated_beat_error += (beat - beat_pred).item() ** 2
+                accumulated_vest_error += ((vestibular - result['vest_pred'].squeeze()) ** 2).sum().item()
+                accumulated_beat_error += ((beat - result['beat_pred'].squeeze()) ** 2).sum().item()
                 steps_since_last_log += 1
 
                 # Report intermediate values for pruning
                 if global_step % 200 == 0 and steps_since_last_log > 0:
-                    current_inference_error, _ = calc_inference_error_sensorimotor(
-                        network, config
-                    )
+                    inference_errors = calc_inference_error_sensorimotor(network, config)
+                    current_inference_error = inference_errors['vest_inference_error']
 
                     if current_inference_error < min_inference_error:
                         min_inference_error = current_inference_error
@@ -161,7 +181,10 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
 
 
 def save_best_config(
-    study: optuna.Study, base_config: Dict[str, Any], results_dir: Path, timestamp: str
+    study: optuna.Study,
+    base_config: Dict[str, Any],
+    results_dir: Path,
+    timestamp: str
 ) -> Path:
     """
     Save the best hyperparameters to a config file.
@@ -179,28 +202,45 @@ def save_best_config(
     best_config = copy.deepcopy(base_config)
 
     # Update config with best parameters
-    best_config["experiment"]["random_seed"] = best_params["random_seed"]
-    best_config["network"]["associative_size"] = best_params["associative_size"]
-    best_config["network"]["inference_learning_rate"] = best_params[
-        "inference_learning_rate"
-    ]
-    best_config["network"]["weight_learning_rate"] = best_params["weight_learning_rate"]
-    best_config["network"]["n_inference_steps"] = best_params["n_inference_steps"]
+    best_config['experiment']['random_seed'] = best_params['random_seed']
+
+    # Layer sizes
+    best_config['network']['higher_size'] = best_params['higher_size']
+    best_config['network']['associative_size'] = best_params['associative_size']
+
+    # Timescales
+    best_config['network']['alpha_H'] = best_params['alpha_H']
+    best_config['network']['alpha_x'] = best_params['alpha_x']
+
+    # Inference learning rates
+    best_config['network']['inference_learning_rate_H'] = best_params['inference_learning_rate_H']
+    best_config['network']['inference_learning_rate_x'] = best_params['inference_learning_rate_x']
+
+    # Weight learning rates
+    best_config['network']['weight_learning_rate_H'] = best_params['weight_learning_rate_H']
+    best_config['network']['weight_learning_rate_x'] = best_params['weight_learning_rate_x']
+
+    # Inference steps
+    best_config['network']['n_inference_steps'] = best_params['n_inference_steps']
 
     # Add timestamp and best trial info to experiment name
-    best_config["experiment"][
-        "name"
-    ] = f"best_params_{timestamp}_trial_{study.best_trial.number}"
+    best_config['experiment']['name'] = (
+        f"best_params_{timestamp}_trial_{study.best_trial.number}"
+    )
 
     # Save best config
     best_config_path = results_dir / f"best_config_{timestamp}.yaml"
-    with open(best_config_path, "w") as f:
+    with open(best_config_path, 'w') as f:
         yaml.dump(best_config, f)
 
     return best_config_path
 
 
-def save_visualizations(study: optuna.Study, results_dir: Path, timestamp: str) -> None:
+def save_visualizations(
+    study: optuna.Study,
+    results_dir: Path,
+    timestamp: str
+) -> None:
     """
     Save Optuna visualization plots.
 
@@ -259,18 +299,26 @@ def main() -> None:
     Parses arguments, creates Optuna study, runs optimization,
     and saves results.
     """
-    parser = argparse.ArgumentParser(description="Tune hyperparameters using Optuna")
-    parser.add_argument(
-        "--config", type=str, required=True, help="Path to base config file"
+    parser = argparse.ArgumentParser(
+        description="Tune hyperparameters for hierarchical network using Optuna"
     )
     parser.add_argument(
-        "--n_trials", type=int, default=50, help="Number of Optuna trials"
-    )
-    parser.add_argument(
-        "--study_name",
+        '--config',
         type=str,
-        default="sensorimotor_tuning",
-        help="Name for the Optuna study",
+        required=True,
+        help='Path to base config file'
+    )
+    parser.add_argument(
+        '--n_trials',
+        type=int,
+        default=50,
+        help='Number of Optuna trials'
+    )
+    parser.add_argument(
+        '--study_name',
+        type=str,
+        default='hierarchical_sensorimotor_tuning',
+        help='Name for the Optuna study'
     )
     args = parser.parse_args()
 
@@ -280,9 +328,9 @@ def main() -> None:
 
     # Create directory for Optuna results
     results_dir = (
-        Path(base_config["saving"]["base_dir"])
-        / base_config["experiment"]["mode"]
-        / "optuna_results"
+        Path(base_config['saving']['base_dir']) /
+        base_config["experiment"]["mode"] /
+        "optuna_results"
     )
     results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -292,17 +340,18 @@ def main() -> None:
         study_name=args.study_name,
         storage=storage_name,
         sampler=TPESampler(seed=42),
-        direction="minimize",
-        load_if_exists=True,
+        direction='minimize',
+        load_if_exists=True
     )
 
     # Run optimization
     print(f"Starting Optuna optimization with {args.n_trials} trials...")
+    print(f"Tuning hierarchical network parameters including higher_size, alpha_H, alpha_x")
     study.optimize(
         lambda trial: objective(trial, base_config),
         n_trials=args.n_trials,
         timeout=None,
-        n_jobs=1,
+        n_jobs=1
     )
 
     # Print results

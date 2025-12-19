@@ -1,5 +1,5 @@
 """
-Training script for the sensorimotor predictive coding network.
+Training script for the hierarchical sensorimotor predictive coding network.
 
 Trains the network on paired auditory-vestibular input to learn
 rhythm prediction and cross-modal associations.
@@ -7,28 +7,27 @@ rhythm prediction and cross-modal associations.
 
 import argparse
 from typing import Dict, Any, Tuple
-import random
 
 import numpy as np
-import torch
 
 from network import SensorimotorPCRNN
 from utils import (
     ExperimentManager,
     generate_input_sequences,
     sample_tempo,
-    get_tempo_values,
+    get_tempo_values
 )
 
 
 def calc_inference_error_sensorimotor(
-    network: SensorimotorPCRNN, config: Dict[str, Any], n_inference_rounds: int = 1
-) -> Tuple[float, float]:
+    network: SensorimotorPCRNN,
+    config: Dict[str, Any],
+) -> Dict[str, float]:
     """
     Calculate inference error over multiple test rounds.
 
     Runs inference with different tempos (if range mode) and computes
-    average prediction errors for both vestibular and beat signals.
+    average prediction errors for all layers.
 
     Args:
         network: Trained SensorimotorPCRNN network
@@ -36,50 +35,68 @@ def calc_inference_error_sensorimotor(
         n_inference_rounds: Number of inference rounds to average over
 
     Returns:
-        Tuple of (avg_vest_inference_error, avg_beat_inference_error)
+        Dictionary containing average inference errors:
+            - vest_inference_error
+            - beat_inference_error
+            - x_inference_error
+            - H_inference_error (if hierarchy enabled)
     """
     total_vest_error = 0.0
     total_beat_error = 0.0
+    total_x_error = 0.0
+    total_H_error = 0.0
     total_steps = 0
 
-    tempos = get_tempo_values(config)
-    for tempo in tempos:
-        for _ in range(n_inference_rounds):
-            network.reset_states()
+    use_hierarchy = network.use_hierarchy
 
-            # Sample tempo for this inference round
-            # tempo = sample_tempo(config)
+    for _ in range(config["testing"]["n_inference_rounds"]):
+        network.reset_states()
 
-            # Generate test sequences
-            test_vestibular_seq, test_beat_seq = generate_input_sequences(
-                tempo=tempo,
-                dt=config["experiment"]["dt"],
-                duration=config["testing"]["test_duration"],
-                vestibular_size=config["network"]["vestibular_size"],
-                mode=config["experiment"]["mode"],
+        # Sample tempo for this inference round
+        tempo = sample_tempo(config)
+
+        # Generate test sequences
+        test_vestibular_seq, test_beat_seq = generate_input_sequences(
+            tempo=tempo,
+            dt=config["experiment"]["dt"],
+            duration=config["testing"]["test_duration"],
+            vestibular_size=config["network"]["vestibular_size"],
+            mode=config["experiment"]["mode"],
+        )
+
+        # Run inference for each timestep
+        for vestibular, beat in zip(test_vestibular_seq, test_beat_seq):
+            result = network.timestep_inference(
+                vestibular_input=vestibular,
+                beat_input=beat
             )
 
-            # Run inference for each timestep
-            for vestibular, beat in zip(test_vestibular_seq, test_beat_seq):
-                vestibular_pred, beat_pred, _, _ = network.timestep_inference(
-                    vestibular_input=vestibular, beat_input=beat
-                )
+            # Accumulate errors
+            total_vest_error += ((vestibular - result['vest_pred'].squeeze()) ** 2).sum().item()
+            total_beat_error += ((beat - result['beat_pred'].squeeze()) ** 2).sum().item()
+            total_x_error += (result['e_x'] ** 2).sum().item()
 
-                # Accumulate error
-                total_vest_error += ((vestibular - vestibular_pred) ** 2).sum().item()
-                total_beat_error += ((beat - beat_pred) ** 2).sum().item()
-                total_steps += 1
+            if use_hierarchy:
+                total_H_error += (result['e_H'] ** 2).sum().item()
+
+            total_steps += 1
 
     # Calculate averages
-    avg_vest_inference_error = total_vest_error / total_steps
-    avg_beat_inference_error = total_beat_error / total_steps
+    errors = {
+        'vest_inference_error': total_vest_error / total_steps,
+        'beat_inference_error': total_beat_error / total_steps,
+        'x_inference_error': total_x_error / total_steps
+    }
 
-    return avg_vest_inference_error, avg_beat_inference_error
+    if use_hierarchy:
+        errors['H_inference_error'] = total_H_error / total_steps
+
+    return errors
 
 
 def train_sensorimotor(exp_manager: ExperimentManager) -> None:
     """
-    Train the sensorimotor predictive coding network.
+    Train the hierarchical sensorimotor predictive coding network.
 
     Trains on paired vestibular-auditory input, logging metrics and
     saving model checkpoints when inference error improves.
@@ -88,50 +105,51 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
         exp_manager: ExperimentManager instance for logging and saving
     """
     config = exp_manager.config
-
-    # Setting random seed for all libraries
-    seed = config["experiment"]["random_seed"]
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    net_config = config['network']
 
     # Create network
     network = SensorimotorPCRNN(
-        associative_size=config["network"]["associative_size"],
-        vestibular_size=config["network"]["vestibular_size"],
-        inference_learning_rate=config["network"]["inference_learning_rate"],
-        weight_learning_rate=config["network"]["weight_learning_rate"],
-        n_inference_steps=config["network"]["n_inference_steps"],
-        random_seed=config["experiment"]["random_seed"],
+        higher_size=net_config['higher_size'],
+        associative_size=net_config['associative_size'],
+        vestibular_size=net_config['vestibular_size'],
+        alpha_H=net_config['alpha_H'],
+        alpha_x=net_config['alpha_x'],
+        inference_learning_rate_H=net_config['inference_learning_rate_H'],
+        inference_learning_rate_x=net_config['inference_learning_rate_x'],
+        weight_learning_rate_H=net_config['weight_learning_rate_H'],
+        weight_learning_rate_x=net_config['weight_learning_rate_x'],
+        n_inference_steps=net_config['n_inference_steps'],
+        random_seed=config["experiment"]["random_seed"]
     )
 
-    if config["experiment"]["retrain"]:
-        checkpoint = torch.load(config["experiment"]["checkpoint_path"])
-        network.load_state_dict(checkpoint["model_state_dict"])
+    use_hierarchy = network.use_hierarchy
 
-    # Log tempo configuration
+    # Log tempo and network configuration
     tempo_values = get_tempo_values(config)
     exp_manager.logger.info(f"Training with tempos: {tempo_values}")
+    exp_manager.logger.info(f"Hierarchy enabled: {use_hierarchy}")
 
     # Calculate steps per round (using first tempo for reference)
     reference_tempo = tempo_values[0]
     _, reference_beat_seq = generate_input_sequences(
         tempo=reference_tempo,
-        dt=config["experiment"]["dt"],
-        duration=config["experiment"]["duration"],
-        vestibular_size=config["network"]["vestibular_size"],
-        mode=config["experiment"]["mode"],
+        dt=config['experiment']['dt'],
+        duration=config['experiment']['duration'],
+        vestibular_size=net_config['vestibular_size'],
+        mode=config['experiment']['mode']
     )
     n_steps_per_round = len(reference_beat_seq)
 
     # Initialize error accumulators
     accumulated_vest_error = 0.0
     accumulated_beat_error = 0.0
+    accumulated_x_error = 0.0
+    accumulated_H_error = 0.0
     steps_since_last_log = 0
     min_avg_vest_inference_error = np.inf
 
     # Training loop
-    for round_idx in range(config["experiment"]["n_training_rounds"]):
+    for round_idx in range(config['experiment']['n_training_rounds']):
         network.reset_states()
 
         # Sample tempo for this training round
@@ -142,7 +160,7 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
             tempo=tempo,
             dt=config["experiment"]["dt"],
             duration=config["experiment"]["duration"],
-            vestibular_size=config["network"]["vestibular_size"],
+            vestibular_size=net_config["vestibular_size"],
             mode=config["experiment"]["mode"],
         )
 
@@ -156,39 +174,65 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
             vestibular = vestibular_seq[step]
 
             # Training step
-            vestibular_pred, beat_pred = network.timestep_train(vestibular, beat)
+            result = network.timestep_train(vestibular, beat)
 
             # Accumulate errors
-            accumulated_vest_error += ((vestibular - vestibular_pred) ** 2).sum().item()
-            accumulated_beat_error += (beat - beat_pred).item() ** 2
+            accumulated_vest_error += ((vestibular - result['vest_pred'].squeeze()) ** 2).sum().item()
+            accumulated_beat_error += ((beat - result['beat_pred'].squeeze()) ** 2).sum().item()
+
+            # We need to compute x_error and H_error from current state
+            # Run a quick error computation
+            predictions = network.compute_predictions()
+            if use_hierarchy:
+                # Approximate x and H errors from predictions
+                # These are computed after inference, so they should be small
+                x_err = (network.x - predictions['mu_x']).pow(2).sum().item()
+                H_err = (network.H - predictions['mu_H']).pow(2).sum().item()
+                accumulated_x_error += x_err
+                accumulated_H_error += H_err
+            else:
+                x_err = (network.x - predictions['mu_x']).pow(2).sum().item()
+                accumulated_x_error += x_err
+
             steps_since_last_log += 1
 
             # Log metrics periodically
-            if global_step % config["saving"]["log_every"] == 0:
+            if global_step % config['saving']['log_every'] == 0:
                 # Calculate average training errors
                 avg_vest_error = accumulated_vest_error / steps_since_last_log
                 avg_beat_error = accumulated_beat_error / steps_since_last_log
+                avg_x_error = accumulated_x_error / steps_since_last_log
 
                 # Calculate inference errors
-                avg_vest_inference_error, avg_beat_inference_error = (
-                    calc_inference_error_sensorimotor(network, config)
-                )
+                inference_errors = calc_inference_error_sensorimotor(network, config)
+
+                # Build metrics dict
+                metrics = {
+                    'vest_error': avg_vest_error,
+                    'beat_error': avg_beat_error,
+                    'x_error': avg_x_error,
+                    'vest_inference_error': inference_errors['vest_inference_error'],
+                    'beat_inference_error': inference_errors['beat_inference_error'],
+                    'x_inference_error': inference_errors['x_inference_error']
+                }
+
+                if use_hierarchy:
+                    avg_H_error = accumulated_H_error / steps_since_last_log
+                    metrics['H_error'] = avg_H_error
+                    metrics['H_inference_error'] = inference_errors['H_inference_error']
 
                 # Log metrics
-                metrics = {
-                    "vest_error": avg_vest_error,
-                    "beat_error": avg_beat_error,
-                    "vest_inference_error": avg_vest_inference_error,
-                    "beat_inference_error": avg_beat_inference_error,
-                }
                 exp_manager.log_metrics(metrics, global_step)
 
                 # Reset accumulators
                 accumulated_vest_error = 0.0
                 accumulated_beat_error = 0.0
+                accumulated_x_error = 0.0
+                accumulated_H_error = 0.0
                 steps_since_last_log = 0
 
                 # Save model if inference error improved
+                avg_vest_inference_error = inference_errors['vest_inference_error']
                 if avg_vest_inference_error < min_avg_vest_inference_error:
                     min_avg_vest_inference_error = avg_vest_inference_error
                     exp_manager.save_model(network, global_step)
@@ -205,23 +249,26 @@ def train() -> None:
     experiment mode specified in config.
     """
     parser = argparse.ArgumentParser(
-        description="Train sensorimotor predictive coding network"
+        description="Train hierarchical sensorimotor predictive coding network"
     )
-    parser.add_argument("--config", type=str, required=True, help="Path to config file")
+    parser.add_argument(
+        '--config',
+        type=str,
+        required=True,
+        help='Path to config file'
+    )
     args = parser.parse_args()
 
     # Initialize experiment
     exp_manager = ExperimentManager(args.config)
 
     # Start training based on mode
-    mode = exp_manager.config["experiment"]["mode"]
+    mode = exp_manager.config['experiment']['mode']
 
     if mode in {"sensorimotor", "doublebeat"}:
         train_sensorimotor(exp_manager)
     else:
-        raise ValueError(
-            f"Unknown experiment mode: {mode}. Must be 'sensorimotor' or 'doublebeat'."
-        )
+        raise ValueError(f"Unknown experiment mode: {mode}. Must be 'sensorimotor' or 'doublebeat'.")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,6 @@ Provides file and console logging with best result tracking.
 
 import logging
 from pathlib import Path
-from datetime import datetime
 from typing import Dict, Optional, Any
 
 
@@ -24,7 +23,10 @@ class ExperimentLogger:
     """
 
     def __init__(
-        self, exp_dir: Path, log_filename: str = "training.log", level: str = "INFO"
+        self,
+        exp_dir: Path,
+        log_filename: str = "training.log",
+        level: str = "INFO"
     ) -> None:
         """
         Initialize the experiment logger.
@@ -49,7 +51,8 @@ class ExperimentLogger:
 
         # Create formatters
         formatter = logging.Formatter(
-            "%(asctime)s | %(levelname)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            "%(asctime)s | %(levelname)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
         )
 
         # File handler
@@ -140,8 +143,12 @@ class ExperimentLogger:
         step: int,
         vest_error: float,
         beat_error: float,
+        x_error: float,
         vest_inference_error: float,
         beat_inference_error: float,
+        x_inference_error: float,
+        H_error: Optional[float] = None,
+        H_inference_error: Optional[float] = None
     ) -> None:
         """
         Log metrics for a training step.
@@ -150,32 +157,46 @@ class ExperimentLogger:
             step: Current training step
             vest_error: Vestibular prediction error (training)
             beat_error: Beat prediction error (training)
+            x_error: Associative layer error (training)
             vest_inference_error: Vestibular inference error
             beat_inference_error: Beat inference error
+            x_inference_error: Associative layer inference error
+            H_error: Higher layer error (training, optional)
+            H_inference_error: Higher layer inference error (optional)
         """
         total_error = vest_error + beat_error
         total_inference_error = vest_inference_error + beat_inference_error
 
         # Update best tracking
-        is_new_best = self.update_best(
-            "vest_inference_error", vest_inference_error, step
-        )
+        is_new_best = self.update_best("vest_inference_error", vest_inference_error, step)
         best_info = self.get_best("vest_inference_error")
 
         best_str = ""
         if best_info:
-            best_str = f" | best_vest_inference={best_info['value']:.6f} (step {best_info['step']})"
+            best_str = f" | best_vest_inf={best_info['value']:.6f} (step {best_info['step']})"
 
+        # Build message
         message = (
             f"Step {step} | "
-            f"vest_error={vest_error:.6f} | "
-            f"beat_error={beat_error:.6f} | "
-            f"total_error={total_error:.6f} | "
-            f"vest_inference={vest_inference_error:.6f} | "
-            f"beat_inference={beat_inference_error:.6f} | "
-            f"total_inference={total_inference_error:.6f}"
-            f"{best_str}"
+            f"v_err={vest_error:.6f} | "
+            f"b_err={beat_error:.6f} | "
+            f"x_err={x_error:.6f} | "
         )
+
+        if H_error is not None:
+            message += f"H_err={H_error:.6f} | "
+
+        message += (
+            f"v_inf={vest_inference_error:.6f} | "
+            f"b_inf={beat_inference_error:.6f} | "
+            f"x_inf={x_inference_error:.6f}"
+        )
+
+        if H_inference_error is not None:
+            message += f" | H_inf={H_inference_error:.6f}"
+
+        message += f" | total={total_error:.6f} | total_inf={total_inference_error:.6f}"
+        message += best_str
 
         if is_new_best:
             message += " [NEW BEST]"
@@ -196,7 +217,11 @@ class ExperimentLogger:
             self.info(f"Model saved at step {step}")
 
     def log_testing_start(
-        self, model_step: int, tempo: float, continuation: bool, prediction_timing: str
+        self,
+        model_step: int,
+        tempo: float,
+        continuation: bool,
+        prediction_timing: str
     ) -> None:
         """
         Log the start of a testing session.
@@ -213,7 +238,12 @@ class ExperimentLogger:
         )
 
     def log_testing_complete(
-        self, vest_error: float, beat_error: float, plot_path: Optional[Path] = None
+        self,
+        vest_error: float,
+        beat_error: float,
+        x_error: float,
+        H_error: Optional[float] = None,
+        plot_path: Optional[Path] = None
     ) -> None:
         """
         Log the completion of a testing session.
@@ -221,13 +251,24 @@ class ExperimentLogger:
         Args:
             vest_error: Average vestibular error during testing
             beat_error: Average beat error during testing
+            x_error: Average associative layer error during testing
+            H_error: Average higher layer error (optional)
             plot_path: Optional path where plot was saved
         """
         total_error = vest_error + beat_error
-        self.info(
-            f"Test complete | vest_error={vest_error:.6f} | "
-            f"beat_error={beat_error:.6f} | total_error={total_error:.6f}"
+
+        message = (
+            f"Test complete | v_err={vest_error:.6f} | "
+            f"b_err={beat_error:.6f} | x_err={x_error:.6f}"
         )
+
+        if H_error is not None:
+            message += f" | H_err={H_error:.6f}"
+
+        message += f" | total={total_error:.6f}"
+
+        self.info(message)
+
         if plot_path:
             self.info(f"Plot saved: {plot_path}")
 
@@ -244,8 +285,8 @@ class ExperimentLogger:
         self.info(f"Experiment name: {config['experiment']['name']}")
         self.info(f"Mode: {config['experiment']['mode']}")
 
-        tempo_config = config["experiment"]["tempo"]
-        if tempo_config["mode"] == "single":
+        tempo_config = config['experiment']['tempo']
+        if tempo_config['mode'] == 'single':
             self.info(f"Tempo: {tempo_config['value']} (single)")
         else:
             self.info(
@@ -254,7 +295,13 @@ class ExperimentLogger:
             )
 
         self.info(f"Training rounds: {config['experiment']['n_training_rounds']}")
-        self.info(f"Network size: {config['network']['associative_size']}")
+
+        # Network info
+        net_config = config['network']
+        self.info(f"Higher layer size: {net_config['higher_size']}")
+        self.info(f"Associative layer size: {net_config['associative_size']}")
+        self.info(f"Timescales: alpha_H={net_config['alpha_H']}, alpha_x={net_config['alpha_x']}")
+
         self.info("=" * 60)
 
     def log_experiment_end(self) -> None:
@@ -268,15 +315,15 @@ class ExperimentLogger:
         if self.best_metrics:
             self.info("Best results:")
             for metric_name, data in self.best_metrics.items():
-                self.info(
-                    f"  {metric_name}: {data['value']:.6f} at step {data['step']}"
-                )
+                self.info(f"  {metric_name}: {data['value']:.6f} at step {data['step']}")
 
         self.info("=" * 60)
 
 
 def create_logger(
-    exp_dir: Path, log_filename: str = "training.log", level: str = "INFO"
+    exp_dir: Path,
+    log_filename: str = "training.log",
+    level: str = "INFO"
 ) -> ExperimentLogger:
     """
     Factory function to create an ExperimentLogger.
