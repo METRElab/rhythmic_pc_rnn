@@ -51,37 +51,36 @@ def calc_inference_error_sensorimotor(
 
     use_hierarchy = network.use_hierarchy
 
-    for _ in range(config["testing"]["n_inference_rounds"]):
-        network.reset_states()
+    tempos = get_tempo_values(config)
+    for tempo in tempos:
+        for _ in range(config["testing"]["n_inference_rounds"]):
+            network.reset_states()
 
-        # Sample tempo for this inference round
-        tempo = sample_tempo(config)
-
-        # Generate test sequences
-        test_vestibular_seq, test_beat_seq = generate_input_sequences(
-            tempo=tempo,
-            dt=config["experiment"]["dt"],
-            duration=config["testing"]["test_duration"],
-            vestibular_size=config["network"]["vestibular_size"],
-            mode=config["experiment"]["mode"],
-        )
-
-        # Run inference for each timestep
-        for vestibular, beat in zip(test_vestibular_seq, test_beat_seq):
-            result = network.timestep_inference(
-                vestibular_input=vestibular,
-                beat_input=beat
+            # Generate test sequences
+            test_vestibular_seq, test_beat_seq = generate_input_sequences(
+                tempo=tempo,
+                dt=config["experiment"]["dt"],
+                duration=config["testing"]["test_duration"],
+                vestibular_size=config["network"]["vestibular_size"],
+                mode=config["experiment"]["mode"],
             )
 
-            # Accumulate errors
-            total_vest_error += ((vestibular - result['vest_pred'].squeeze()) ** 2).sum().item()
-            total_beat_error += ((beat - result['beat_pred'].squeeze()) ** 2).sum().item()
-            total_x_error += (result['e_x'] ** 2).sum().item()
+            # Run inference for each timestep
+            for vestibular, beat in zip(test_vestibular_seq, test_beat_seq):
+                result = network.timestep_inference(
+                    vestibular_input=vestibular,
+                    beat_input=beat
+                )
 
-            if use_hierarchy:
-                total_H_error += (result['e_H'] ** 2).sum().item()
+                # Accumulate errors
+                total_vest_error += ((vestibular - result['vest_pred'].squeeze()) ** 2).sum().item()
+                total_beat_error += ((beat - result['beat_pred'].squeeze()) ** 2).sum().item()
+                total_x_error += (result['e_x'] ** 2).sum().item()
 
-            total_steps += 1
+                if use_hierarchy:
+                    total_H_error += (result['e_H'] ** 2).sum().item()
+
+                total_steps += 1
 
     # Calculate averages
     errors = {
@@ -206,7 +205,8 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
             steps_since_last_log += 1
 
             # Log metrics periodically
-            if global_step % config['saving']['log_every'] == 0:
+            # if global_step % config['saving']['log_every'] == 0:
+            if global_step % config['saving']['log_every'] == 0 and steps_since_last_log > 0:
                 # Calculate average training errors
                 avg_vest_error = accumulated_vest_error / steps_since_last_log
                 avg_beat_error = accumulated_beat_error / steps_since_last_log
