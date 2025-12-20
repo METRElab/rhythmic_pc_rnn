@@ -293,7 +293,8 @@ def run_inference(
     vestibular_seq: torch.Tensor,
     beat_seq: torch.Tensor,
     continuation: bool,
-    continuation_start_fraction: float = 0.5
+    continuation_start_fraction: float = 0.5,
+    prediction_timing: str = "after"
 ) -> Dict[str, np.ndarray]:
     """
     Run inference on a sequence and collect predictions.
@@ -304,6 +305,8 @@ def run_inference(
         beat_seq: Beat input sequence
         continuation: Whether to enable continuation mode
         continuation_start_fraction: Fraction of sequence after which continuation starts
+        prediction_timing: "before" or "after" inference optimization
+
 
     Returns:
         Dictionary containing:
@@ -333,7 +336,8 @@ def run_inference(
         result = network.timestep_inference(
             vestibular_input=vestibular,
             beat_input=beat,
-            continuation=continuation_flag
+            continuation=continuation_flag,
+            prediction_timing=prediction_timing,
         )
 
         vest_pred_list.append(result['vest_pred'].squeeze().tolist())
@@ -464,7 +468,8 @@ def test_sensorimotor_model(
         network=network,
         vestibular_seq=vestibular_seq,
         beat_seq=beat_seq,
-        continuation=continuation
+        continuation=continuation,
+        prediction_timing=prediction_timing,
     )
 
     # Calculate errors

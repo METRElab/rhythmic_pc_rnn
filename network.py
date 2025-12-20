@@ -411,6 +411,7 @@ class SensorimotorPCRNN(nn.Module):
         vestibular_input: torch.Tensor,
         beat_input: torch.Tensor,
         continuation: bool = False,
+        prediction_timing: str = "after"
     ) -> Dict[str, torch.Tensor]:
         """
         Process one inference timestep (no weight updates).
@@ -422,6 +423,7 @@ class SensorimotorPCRNN(nn.Module):
             vestibular_input: Vestibular input (for error computation only)
             beat_input: Beat sensory input
             continuation: If True, run without sensory input (internal continuation)
+            prediction_timing: "before" or "after" inference optimization
 
         Returns:
             Dictionary containing:
@@ -465,6 +467,23 @@ class SensorimotorPCRNN(nn.Module):
             mu_H = None
         mu_x = self.x.clone()
 
+        # Step 3.5: Get before predictions and errors
+        predictions_before = self.compute_predictions()
+        errors_before = self.compute_prediction_errors(
+            vestibular_input, beat_input, mu_H, mu_x
+        )
+
+        result_before = {
+            'vest_pred': predictions_before['mu_v'],
+            'beat_pred': predictions_before['mu_b'],
+            'e_v': errors_before['e_v'],
+            'e_b': errors_before['e_b'],
+            'e_x': errors_before['e_x']
+        }
+
+        if self.use_hierarchy:
+            result_before['e_H'] = errors_before['e_H']
+
         # Step 4: Inference loop (no vestibular input, only beat)
         for _ in range(self.n_inference_steps):
             if continuation:
@@ -491,4 +510,10 @@ class SensorimotorPCRNN(nn.Module):
         if self.use_hierarchy:
             result['e_H'] = errors['e_H']
 
-        return result
+        if prediction_timing == "before":
+            return result_before
+        if prediction_timing == "after":
+            return result
+        else:
+            raise ValueError("prediction_timing must be 'before' or 'after'")
+
