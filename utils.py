@@ -103,7 +103,7 @@ def generate_input_sequences(
 
     # Beat sequence: binary pulse train
     beat_times = np.arange(0, duration, tempo)
-    beat_indices = (beat_times / dt).astype(int)
+    beat_indices = np.round(beat_times / dt).astype(int)
     beat_indices = beat_indices[beat_indices < n_steps]
     beat_sequence = np.zeros(n_steps)
     beat_sequence[beat_indices] = 1
