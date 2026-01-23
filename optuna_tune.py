@@ -45,28 +45,37 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     config = copy.deepcopy(base_config)
 
     # Define the hyperparameters to tune
-    config['experiment']['random_seed'] = trial.suggest_int('random_seed', 1, 1000)
+    # todo
+    # config['experiment']['random_seed'] = trial.suggest_int('random_seed', 1, 1000)
 
     # Layer sizes
-    config['network']['higher_size'] = trial.suggest_int('higher_size', 0, 4)
+    # todo
+    # config['network']['higher_size'] = trial.suggest_int('higher_size', 0, 4)
+    config['network']['higher_size'] = 1
     config['network']['associative_size'] = trial.suggest_int('associative_size', 16, 64, step=4)
 
     # Timescales
-    config['network']['alpha_H'] = trial.suggest_float('alpha_H', 0.01, 0.5, log=True)
-    config['network']['alpha_x'] = trial.suggest_float('alpha_x', 0.1, 1.0, step=0.1)
+    # todo
+    config['network']['alpha_H'] = trial.suggest_float('alpha_H', 0, 0.1, step=0.01)
+    # config['network']['alpha_H'] = 0
+    config['network']['alpha_x'] = trial.suggest_float('alpha_x', 0.8, 1.0, step=0.01)
 
     # Inference learning rates
+    # todo
     config['network']['inference_learning_rate_H'] = trial.suggest_float(
-        'inference_learning_rate_H', 0.01, 0.5, log=True
+        'inference_learning_rate_H', 0.001, 0.5, log=True
     )
+    # config['network']['inference_learning_rate_H'] = 0
     config['network']['inference_learning_rate_x'] = trial.suggest_float(
         'inference_learning_rate_x', 0.001, 0.5, log=True
     )
 
     # Weight learning rates
+    # todo
     config['network']['weight_learning_rate_H'] = trial.suggest_float(
         'weight_learning_rate_H', 0.001, 0.5, log=True
     )
+    # config['network']['weight_learning_rate_H'] = 0
     config['network']['weight_learning_rate_x'] = trial.suggest_float(
         'weight_learning_rate_x', 0.001, 0.5, log=True
     )
@@ -161,7 +170,8 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
                 steps_since_last_log += 1
 
                 # Report intermediate values for pruning
-                if global_step % 200 == 0 and steps_since_last_log > 0:
+                # if global_step % 200 == 0 and steps_since_last_log > 0:
+                if global_step % 1000 == 0 and steps_since_last_log > 0:
                     inference_errors = calc_inference_error_sensorimotor(network, config)
                     current_inference_error = inference_errors['vest_inference_error']
 
@@ -210,26 +220,26 @@ def save_best_config(
     best_config = copy.deepcopy(base_config)
 
     # Update config with best parameters
-    best_config['experiment']['random_seed'] = best_params['random_seed']
+    best_config['experiment']['random_seed'] = best_params.get("random_seed", None)
 
     # Layer sizes
-    best_config['network']['higher_size'] = best_params['higher_size']
-    best_config['network']['associative_size'] = best_params['associative_size']
+    best_config['network']['higher_size'] = best_params.get("higher_size", base_config['network']['higher_size'])
+    best_config['network']['associative_size'] = best_params.get("associative_size", None)
 
     # Timescales
-    best_config['network']['alpha_H'] = best_params['alpha_H']
-    best_config['network']['alpha_x'] = best_params['alpha_x']
+    best_config['network']['alpha_H'] = best_params.get("alpha_H", None)
+    best_config['network']['alpha_x'] = best_params.get("alpha_x", None)
 
     # Inference learning rates
-    best_config['network']['inference_learning_rate_H'] = best_params['inference_learning_rate_H']
-    best_config['network']['inference_learning_rate_x'] = best_params['inference_learning_rate_x']
+    best_config['network']['inference_learning_rate_H'] = best_params.get("inference_learning_rate_H", None)
+    best_config['network']['inference_learning_rate_x'] = best_params.get("inference_learning_rate_x", None)
 
     # Weight learning rates
-    best_config['network']['weight_learning_rate_H'] = best_params['weight_learning_rate_H']
-    best_config['network']['weight_learning_rate_x'] = best_params['weight_learning_rate_x']
+    best_config['network']['weight_learning_rate_H'] = best_params.get("weight_learning_rate_H", None)
+    best_config['network']['weight_learning_rate_x'] = best_params.get("weight_learning_rate_x", None)
 
     # Inference steps
-    best_config['network']['n_inference_steps'] = best_params['n_inference_steps']
+    best_config['network']['n_inference_steps'] = best_params.get("n_inference_steps", None)
 
     # Add timestamp and best trial info to experiment name
     best_config['experiment']['name'] = (
