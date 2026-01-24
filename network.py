@@ -487,7 +487,7 @@ class SensorimotorPCRNN(nn.Module):
         # Step 4: Inference loop (no vestibular input, only beat)
         for _ in range(self.n_inference_steps):
             if continuation:
-                # No sensory input during continuation
+                # No vestibular input and 0 for beat input
                 self.optimize_states(None, torch.tensor([[0.0]]), mu_H, mu_x)
             else:
                 # Only beat input (vestibular=None to generate prediction)
