@@ -57,12 +57,16 @@ def calc_inference_error_sensorimotor(
             network.reset_states()
 
             # Generate test sequences
+            # test_vestibular_seq, test_beat_seq = generate_input_sequences(
+            #     tempo=tempo,
+            #     dt=config["experiment"]["dt"],
+            #     duration=config["testing"]["test_duration"],
+            #     vestibular_size=config["network"]["vestibular_size"],
+            #     mode=config["experiment"]["mode"],
+            # )
             test_vestibular_seq, test_beat_seq = generate_input_sequences(
                 tempo=tempo,
-                dt=config["experiment"]["dt"],
-                duration=config["testing"]["test_duration"],
-                vestibular_size=config["network"]["vestibular_size"],
-                mode=config["experiment"]["mode"],
+                config=config,
             )
 
             # Run inference for each timestep
@@ -139,12 +143,16 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
 
     # Calculate steps per round (using first tempo for reference)
     reference_tempo = tempo_values[0]
+    # _, reference_beat_seq = generate_input_sequences(
+    #     tempo=reference_tempo,
+    #     dt=config['experiment']['dt'],
+    #     duration=config['experiment']['duration'],
+    #     vestibular_size=net_config['vestibular_size'],
+    #     mode=config['experiment']['mode']
+    # )
     _, reference_beat_seq = generate_input_sequences(
         tempo=reference_tempo,
-        dt=config['experiment']['dt'],
-        duration=config['experiment']['duration'],
-        vestibular_size=net_config['vestibular_size'],
-        mode=config['experiment']['mode']
+        config=config,
     )
     n_steps_per_round = len(reference_beat_seq)
 
@@ -164,12 +172,16 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
         tempo = sample_tempo(config)
 
         # Generate input sequences for this round
+        # vestibular_seq, beat_seq = generate_input_sequences(
+        #     tempo=tempo,
+        #     dt=config["experiment"]["dt"],
+        #     duration=config["experiment"]["duration"],
+        #     vestibular_size=net_config["vestibular_size"],
+        #     mode=config["experiment"]["mode"],
+        # )
         vestibular_seq, beat_seq = generate_input_sequences(
             tempo=tempo,
-            dt=config["experiment"]["dt"],
-            duration=config["experiment"]["duration"],
-            vestibular_size=net_config["vestibular_size"],
-            mode=config["experiment"]["mode"],
+            config=config,
         )
 
         n_steps = len(beat_seq)
@@ -274,7 +286,7 @@ def train() -> None:
     # Start training based on mode
     mode = exp_manager.config['experiment']['mode']
 
-    if mode in {"sensorimotor", "doublebeat"}:
+    if mode in {"sensorimotor", "doublebeat", "uncorrelated"}:
         train_sensorimotor(exp_manager)
     else:
         raise ValueError(f"Unknown experiment mode: {mode}. Must be 'sensorimotor' or 'doublebeat'.")

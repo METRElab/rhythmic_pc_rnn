@@ -1,0 +1,71 @@
+# Configuration for UNCORRELATED control experiment
+# This addresses Reviewer 1's concern about whether the network learns
+# cross-modal associations or simply becomes a frequency-matched oscillator.
+#
+# KEY DIFFERENCE from main experiment:
+# - Vestibular input: Regular triangular waveform (same as main experiment)
+# - Auditory input: RANDOM pulses with variable inter-pulse intervals
+#
+# EXPECTED RESULTS:
+# 1. Network will learn to predict vestibular waveform (error decreases)
+# 2. Auditory prediction error will NOT decrease much (random = unpredictable)
+# 3. After training, auditory-only input will NOT trigger vestibular oscillation
+#    (because auditory channel learned ~zero predictive weights)
+#
+# This demonstrates that CORRELATION between modalities is essential,
+# not just their co-presence during training.
+
+experiment:
+  dt: 0.05
+  duration: 10.0
+  mode: uncorrelated  # NEW MODE: regular vestibular + random auditory
+  n_training_rounds: 6000  # Match main experiment
+  name: uncorrelated_control
+  random_seed: 164
+
+  tempo:
+    # Vestibular tempo (auditory is random, but we still need this for vestibular)
+    mode: single
+    value: 0.5
+    # Range settings (unused in single mode, kept for reference)
+    min: 0.4
+    max: 0.8
+    step: 0.1
+
+  # NEW: Configuration for random auditory pulses
+  random_audio:
+    # Inter-pulse interval range in seconds
+    # Pulses occur at random times with intervals drawn uniformly from [ipi_min, ipi_max]
+    #
+    # Design rationale:
+    # - Mean IPI of 0.5s matches vestibular tempo, so pulse DENSITY is similar
+    # - But wide range (0.2 to 0.8) ensures NO consistent phase relationship
+    # - This makes it a fair comparison: same average number of pulses,
+    #   just without temporal correlation to vestibular phase
+    ipi_min: 0.2  # Minimum time between pulses (seconds)
+    ipi_max: 0.8  # Maximum time between pulses (seconds)
+
+logging:
+  level: INFO
+
+network:
+  alpha_H: 0.1
+  alpha_x: 1
+  associative_size: 60
+  higher_size: 0
+  inference_learning_rate_H: 0.049706088801492805
+  inference_learning_rate_x: 0.049706088801492805
+  n_inference_steps: 34
+  vestibular_size: 1
+  weight_learning_rate_H: 0.47037325216247716
+  weight_learning_rate_x: 0.47037325216247716
+
+saving:
+  base_dir: experiments
+  log_every: 10
+
+testing:
+  continuation: false
+  n_inference_rounds: 1
+  prediction_timing: after
+  test_duration: 20.0

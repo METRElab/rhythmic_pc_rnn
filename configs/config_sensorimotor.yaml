@@ -14,7 +14,7 @@ experiment:
 
 network:
   # Layer sizes
-  higher_size: 0              # m units in H (set to 0 to disable hierarchy)
+  higher_size: 1              # m units in H (set to 0 to disable hierarchy)
   associative_size: 60        # n units in x
   vestibular_size: 1          # vestibular input dimension
 
