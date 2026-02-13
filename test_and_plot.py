@@ -706,10 +706,18 @@ def test_sensorimotor_model(
     plot_path_html = plots_dir / html_filename
     plot_path_png = plots_dir / png_filename
 
+    # If continuation mode, zero out beat input in the continuation phase for plotting
+    if continuation:
+        continuation_start = int(0.5 * len(beat_seq))
+        beat_seq_plot = beat_seq.clone()
+        beat_seq_plot[continuation_start + 1:] = 0.0
+    else:
+        beat_seq_plot = beat_seq
+
     # Plot and save results
     plot_inference_sequence_sensorimotor(
         vestibular_seq=vestibular_seq,
-        beat_seq=beat_seq,
+        beat_seq=beat_seq_plot,
         vestibular_predicted_seq=inference_results['vest_pred'],
         beat_predicted_seq=inference_results['beat_pred'],
         e_v_seq=inference_results['e_v'],
