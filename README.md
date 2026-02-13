@@ -1,25 +1,59 @@
 # Sensorimotor Predictive Coding Network
 
-A predictive coding recurrent neural network for learning rhythm through paired auditory-vestibular input. Based on the hypothesis that maternal gait during pregnancy provides scaffolding for rhythm development.
+Code for the paper: **"Maternal gait contributes to development of rhythm processing in a predictive processing network model"** (Yousefabadi & Cannon, McMaster University).
+
+## Background
+
+Humans are uniquely musical among primates — we spontaneously perceive and move to rhythmic patterns from early infancy. This project investigates a developmental hypothesis: that maternal gait during pregnancy provides the sensory scaffolding necessary for rhythm learning. A walking mother produces correlated auditory (footsteps) and vestibular (body acceleration) signals that reach the fetus, and this correlated multisensory experience may bootstrap the neural circuits underlying rhythm perception and the urge to move to music.
+
+## How the Model Works
+
+The model is a **predictive coding recurrent neural network** that learns by minimizing prediction error across two sensory channels — auditory and vestibular — using only local Hebbian plasticity (no backpropagation through time).
+
+**Architecture.** An associative layer of recurrent hidden units receives input from two parallel sensory pathways. At each timestep the network generates top-down predictions for (1) its own next hidden state and (2) the current auditory and vestibular inputs. Prediction errors (precision-weighted mismatches between predictions and actual values) drive fast within-timestep state updates via gradient descent on variational free energy, followed by slow Hebbian weight updates.
+
+**Training.** The network is trained on paired stimuli that mimic the sensory consequences of rhythmic locomotion: discrete auditory pulses (footsteps) and a continuous triangular vestibular waveform (trunk acceleration). The continuous vestibular signal is key — it bridges the silent gaps between auditory events, solving the temporal credit assignment problem that makes learning from sparse discrete events alone intractable.
+
+**Key results:**
+
+- **Rhythm learning.** After training on correlated auditory-vestibular input, the network learns to anticipate both modalities, with predictions that lead rather than lag the sensory inputs.
+- **Cross-modal prediction (active inference).** When tested with auditory-only input, the trained network spontaneously generates vestibular predictions matching the training waveform — effectively predicting movement from sound alone. Under active inference, these predictions constitute motor commands, providing a computational account for why hearing rhythm evokes the urge to move.
+- **Continuation.** The network sustains coherent rhythmic predictions even after all external input ceases, demonstrating autonomous rhythm generation through learned recurrent dynamics.
+- **Control conditions.** Training with discrete pulses on both channels (no continuous vestibular signal) fails entirely — the network cannot learn. Training with temporally uncorrelated auditory and vestibular input also fails, confirming that temporal correlation between modalities is essential.
 
 ## Requirements
 
 ```bash
-pip install numpy torch pyyaml tensorboard plotly optuna kaleido
+pip install numpy torch pyyaml tensorboard plotly optuna kaleido scipy matplotlib
 ```
 
 ## Project Structure
 
 ```
 ├── configs/
-│   ├── config_sensorimotor.yaml
-│   └── config_sensorimotor_doublebeat.yaml
-├── logger.py          # Logging utility
-├── network.py         # Predictive coding network
-├── utils.py           # Input generation & experiment management
+│   ├── config_sensorimotor.yaml           # Vestibular + correlated auditory
+│   ├── config_sensorimotor_doublebeat.yaml # Auditory on both channels (hierarchical)
+│   ├── config_beat.yaml                   # Auditory only (no vestibular)
+│   ├── config_doublebeat.yaml             # Auditory on both channels
+│   ├── uncorrelated.yaml                  # Vestibular + random auditory (uniform)
+│   └── uncorrelated_poisson.yaml          # Vestibular + random auditory (Poisson)
+├── network.py         # Hierarchical predictive coding RNN (SensorimotorPCRNN)
 ├── train.py           # Training script
-├── test_and_plot.py   # Testing & visualization
-└── optuna_tune.py     # Hyperparameter tuning
+├── test_and_plot.py   # Testing & interactive Plotly visualization
+├── utils.py           # Input generation & experiment management
+├── logger.py          # Logging utility
+├── optuna_tune.py     # Hyperparameter tuning
+├── visualization/     # Publication-ready paper figure pipeline
+│   ├── style.py                 # Shared matplotlib config
+│   ├── generate_figure_data.py  # Model checkpoints -> .npz data
+│   ├── paper_figures.py         # .npz data -> matplotlib figures
+│   ├── make_figures.py          # CLI orchestrator
+│   └── paper_visualization.py   # Pedagogical/schematic diagrams
+└── experiments/       # Output directory (created at runtime)
+    ├── sensorimotor/
+    ├── doublebeat/
+    ├── beat/
+    └── uncorrelated/
 ```
 
 ## Configuration
@@ -93,7 +127,37 @@ Resume existing study:
 python optuna_tune.py --config configs/config_sensorimotor.yaml --n_trials 50 --study_name my_study
 ```
 
+### Paper Figures
+
+Generate all publication-ready figures from trained experiments:
+
+```bash
+python -m visualization.make_figures \
+    --sensorimotor-config experiments/sensorimotor/{exp_name}/config.yaml \
+    --doublebeat-config experiments/doublebeat/{exp_name}/config.yaml \
+    --before-step 0 \
+    --after-step-sensorimotor 7000 \
+    --after-step-doublebeat 1000 \
+    --tempo 0.5 \
+    --output-dir visualization/paper_output
+```
+
+Re-generate figures without re-running inference (for iterating on aesthetics):
+
+```bash
+python -m visualization.make_figures \
+    --data-dir visualization/paper_output/data \
+    --figures-only \
+    --output-dir visualization/paper_output
+```
+
+See `visualization/README.md` for full documentation of the figure pipeline.
+
 ## Experiment Modes
 
-- `sensorimotor`: Auditory pulses + vestibular triangular wave (default)
-- `doublebeat`: Auditory pulses on both channels (control condition)
+- `sensorimotor`: Vestibular triangular wave + correlated auditory pulses (default)
+- `doublebeat`: Auditory pulses on both channels (control — no vestibular scaffolding)
+- `beat`: Auditory pulses only (no vestibular input)
+- `uncorrelated`: Vestibular triangular wave + random uncorrelated auditory pulses
+  - `uniform` distribution: inter-pulse intervals drawn from `[ipi_min, ipi_max]`
+  - `poisson` distribution: inter-pulse intervals from exponential distribution with rate
