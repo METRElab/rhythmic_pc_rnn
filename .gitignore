@@ -1,3 +1,7 @@
 /experiments
-/visualization
 .idea
+/visualization/.ipynb_checkpoints/
+/visualization/_archive/
+/visualization/pkl_files/
+/visualization/selected/
+/visualization/selected2/
