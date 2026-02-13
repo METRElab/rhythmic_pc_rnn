@@ -57,13 +57,6 @@ def calc_inference_error_sensorimotor(
             network.reset_states()
 
             # Generate test sequences
-            # test_vestibular_seq, test_beat_seq = generate_input_sequences(
-            #     tempo=tempo,
-            #     dt=config["experiment"]["dt"],
-            #     duration=config["testing"]["test_duration"],
-            #     vestibular_size=config["network"]["vestibular_size"],
-            #     mode=config["experiment"]["mode"],
-            # )
             test_vestibular_seq, test_beat_seq = generate_input_sequences(
                 tempo=tempo,
                 config=config,
