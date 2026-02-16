@@ -136,13 +136,6 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
 
     # Calculate steps per round (using first tempo for reference)
     reference_tempo = tempo_values[0]
-    # _, reference_beat_seq = generate_input_sequences(
-    #     tempo=reference_tempo,
-    #     dt=config['experiment']['dt'],
-    #     duration=config['experiment']['duration'],
-    #     vestibular_size=net_config['vestibular_size'],
-    #     mode=config['experiment']['mode']
-    # )
     _, reference_beat_seq = generate_input_sequences(
         tempo=reference_tempo,
         config=config,
@@ -165,13 +158,6 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
         tempo = sample_tempo(config)
 
         # Generate input sequences for this round
-        # vestibular_seq, beat_seq = generate_input_sequences(
-        #     tempo=tempo,
-        #     dt=config["experiment"]["dt"],
-        #     duration=config["experiment"]["duration"],
-        #     vestibular_size=net_config["vestibular_size"],
-        #     mode=config["experiment"]["mode"],
-        # )
         vestibular_seq, beat_seq = generate_input_sequences(
             tempo=tempo,
             config=config,
