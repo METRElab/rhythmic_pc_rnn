@@ -499,7 +499,7 @@ class SensorimotorPCRNN(nn.Module):
             vestibular_input, beat_input, mu_H, mu_x
         )
 
-        result = {
+        result_after = {
             'vest_pred': predictions['mu_v'],
             'beat_pred': predictions['mu_b'],
             'e_v': errors['e_v'],
@@ -508,12 +508,12 @@ class SensorimotorPCRNN(nn.Module):
         }
 
         if self.use_hierarchy:
-            result['e_H'] = errors['e_H']
+            result_after['e_H'] = errors['e_H']
 
         if prediction_timing == "before":
             return result_before
         if prediction_timing == "after":
-            return result
+            return result_after
         else:
             raise ValueError("prediction_timing must be 'before' or 'after'")
 
