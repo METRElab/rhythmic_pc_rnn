@@ -24,23 +24,35 @@ conda activate phd_codes_v2
 ```bash
 python -m visualization.make_figures \
     --sensorimotor-config experiments/sensorimotor/<exp_name>/config.yaml \
-    --doublebeat-config experiments/doublebeat/<exp_name>/config.yaml \
     --before-step 0 \
     --after-step-sensorimotor 7000 \
-    --after-step-doublebeat 1000 \
     --tempo 0.5 \
-    --output-dir visualization/paper_output
-    --prediction_timing before
+    --output-dir visualization/paper_output \
+    --prediction-timing before
 ```
 
 python -m visualization.make_figures \
-    --sensorimotor-config experiments/uncorrelated/uncorrelated_control_white_noise_20260212_221431/config.yaml \
+    --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/uncorrelated_control_white_noise_20260212_221431/config.yaml \
+    --before-step 0 \
+    --after-step-sensorimotor 9240 \
+    --tempo 0.5 \
+    --output-dir visualization/paper_output_white_noise_new \
+    --prediction-timing before \
+    --moving-average-window 50 \
+    --smoothing-window 100
+
+Optionally include the doublebeat control experiment:
+
+```bash
+python -m visualization.make_figures \
+    --sensorimotor-config experiments/sensorimotor/<exp_name>/config.yaml \
     --doublebeat-config experiments/doublebeat/<exp_name>/config.yaml \
     --before-step 0 \
     --after-step-sensorimotor 7000 \
     --after-step-doublebeat 1000 \
     --tempo 0.5 \
     --output-dir visualization/paper_output
+```
 
 This produces:
 
@@ -50,18 +62,22 @@ visualization/paper_output/
         sensorimotor_before_after.npz
         auditory_only_before_after.npz
         continuation.npz
-        double_auditory_before_after.npz
+        continuation_auditory_only.npz
         learning_curve_sensorimotor.npz
-        learning_curve_doublebeat.npz
         metadata.yaml
+        # If --doublebeat-config provided:
+        double_auditory_before_after.npz
+        learning_curve_doublebeat.npz
     figures/
         figure_1a_learning_curve.png
         figure_1b_before_after.png
         figure_2_auditory_only.png
         figure_3_continuation.png
+        figure_3b_continuation_auditory_only.png
+        figure_combined.png
+        # If --doublebeat-config provided:
         figure_4a_learning_curve_doublebeat.png
         figure_4_double_auditory.png
-        figure_combined.png
 ```
 
 ### Re-generate figures only (no inference)
@@ -171,15 +187,18 @@ CLI entry point. See Quick Start above for usage.
 ## CLI Arguments
 
 ```
---sensorimotor-config   Path to sensorimotor experiment config.yaml
---doublebeat-config     Path to doublebeat experiment config.yaml
---before-step           Model step for "before training" (default: 0)
---after-step-sensorimotor  Final model step for sensorimotor experiment
---after-step-doublebeat    Final model step for doublebeat experiment
---tempo                 Tempo in seconds (default: 0.5)
---output-dir            Output directory (default: visualization/paper_output)
---figures-only          Skip data generation, only produce figures
---data-dir              Directory with .npz files (for --figures-only)
+--sensorimotor-config      Path to sensorimotor experiment config.yaml (required)
+--before-step              Model step for "before training" (default: 0)
+--after-step-sensorimotor  Final model step for sensorimotor experiment (required)
+--tempo                    Tempo in seconds (default: 0.5)
+--output-dir               Output directory (default: visualization/paper_output)
+--prediction-timing        "before" or "after" inference optimization (default: after)
+--figures-only             Skip data generation, only produce figures
+--data-dir                 Directory with .npz files (for --figures-only)
+--doublebeat-config        Path to doublebeat experiment config.yaml (optional)
+--after-step-doublebeat    Final model step for doublebeat (required if --doublebeat-config given)
+--moving-average-window    Simple moving average window for learning curves (default: 1, no averaging)
+--smoothing-window         uniform_filter1d smoothing window for learning curves (default: 30)
 ```
 
 ## File Structure
