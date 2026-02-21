@@ -48,17 +48,25 @@ from visualization.paper_figures import (
     plot_continuation,
     plot_double_auditory_1x2,
     plot_learning_curve,
+    plot_summary,
 )
 from visualization.style import apply_paper_style
 
 
-def generate_figures(data_dir: Path, figures_dir: Path) -> None:
+def generate_figures(
+    data_dir: Path,
+    figures_dir: Path,
+    moving_average_window: int = 1,
+    smoothing_window: int = 30,
+) -> None:
     """
     Load .npz data files and produce all paper figures.
 
     Args:
         data_dir: Directory containing the .npz data files
         figures_dir: Directory to save output figures
+        moving_average_window: Simple moving average window for learning curves
+        smoothing_window: uniform_filter1d window for learning curves
     """
     data_dir = Path(data_dir)
     figures_dir = Path(figures_dir)
@@ -70,12 +78,13 @@ def generate_figures(data_dir: Path, figures_dir: Path) -> None:
     sm_path = data_dir / 'sensorimotor_before_after.npz'
     ao_path = data_dir / 'auditory_only_before_after.npz'
     cont_path = data_dir / 'continuation.npz'
+    cont_ao_path = data_dir / 'continuation_auditory_only.npz'
     lc_sm_path = data_dir / 'learning_curve_sensorimotor.npz'
     lc_db_path = data_dir / 'learning_curve_doublebeat.npz'
     db_path = data_dir / 'double_auditory_before_after.npz'
 
     has_doublebeat = lc_db_path.exists() or db_path.exists()
-    total = 7 if has_doublebeat else 5
+    total = 9 if has_doublebeat else 7
     step = 0
 
     print("=== Generating paper figures ===")
@@ -88,7 +97,11 @@ def generate_figures(data_dir: Path, figures_dir: Path) -> None:
         # Sum beat + vest errors for total error
         steps = lc_data['beat_error_steps']
         total_errors = lc_data['beat_error_values'] + lc_data['vest_error_values']
-        fig = plot_learning_curve(steps, total_errors, smoothing_window=30)
+        fig = plot_learning_curve(
+            steps, total_errors,
+            smoothing_window=smoothing_window,
+            moving_average_window=moving_average_window,
+        )
         fig.savefig(
             figures_dir / 'figure_1a_learning_curve.png',
             dpi=300, bbox_inches='tight', facecolor='white',
@@ -140,6 +153,18 @@ def generate_figures(data_dir: Path, figures_dir: Path) -> None:
         )
         print(f"  Saved to {figures_dir / 'figure_3_continuation.png'}")
 
+    # Figure 3b: Continuation auditory-only
+    step += 1
+    if cont_ao_path.exists():
+        print(f"[{step}/{total}] Figure 3b: Continuation (auditory-only)")
+        cont_ao_data = load_figure_data(cont_ao_path)
+        fig = plot_continuation(cont_ao_data)
+        fig.savefig(
+            figures_dir / 'figure_3b_continuation_auditory_only.png',
+            dpi=300, bbox_inches='tight', facecolor='white',
+        )
+        print(f"  Saved to {figures_dir / 'figure_3b_continuation_auditory_only.png'}")
+
     # Figure combined: Multi-panel
     step += 1
     if sm_path.exists() and ao_path.exists():
@@ -156,6 +181,27 @@ def generate_figures(data_dir: Path, figures_dir: Path) -> None:
         )
         print(f"  Saved to {figures_dir / 'figure_combined.png'}")
 
+    # Summary figure: Learning curve + after-training panels
+    step += 1
+    if lc_sm_path.exists() and sm_path.exists() and ao_path.exists():
+        print(f"[{step}/{total}] Summary figure (learning curve + after-training)")
+        lc_data = load_figure_data(lc_sm_path)
+        sm_data = load_figure_data(sm_path)
+        ao_data = load_figure_data(ao_path)
+        lc_steps_arr = lc_data['beat_error_steps']
+        lc_total_errors = lc_data['beat_error_values'] + lc_data['vest_error_values']
+        fig = plot_summary(
+            lc_steps_arr, lc_total_errors,
+            sm_data, ao_data,
+            smoothing_window=smoothing_window,
+            moving_average_window=moving_average_window,
+        )
+        fig.savefig(
+            figures_dir / 'figure_summary.png',
+            dpi=300, bbox_inches='tight', facecolor='white',
+        )
+        print(f"  Saved to {figures_dir / 'figure_summary.png'}")
+
     # Doublebeat figures (only if data exists)
     if has_doublebeat:
         step += 1
@@ -164,7 +210,11 @@ def generate_figures(data_dir: Path, figures_dir: Path) -> None:
             lc_data = load_figure_data(lc_db_path)
             steps = lc_data['beat_error_steps']
             total_errors = lc_data['beat_error_values'] + lc_data['vest_error_values']
-            fig = plot_learning_curve(steps, total_errors, smoothing_window=10)
+            fig = plot_learning_curve(
+                steps, total_errors,
+                smoothing_window=smoothing_window,
+                moving_average_window=moving_average_window,
+            )
             fig.savefig(
                 figures_dir / 'figure_4a_learning_curve_doublebeat.png',
                 dpi=300, bbox_inches='tight', facecolor='white',
@@ -240,6 +290,14 @@ def main():
         default='after',
         help='When to capture predictions: before or after inference optimization'
     )
+    parser.add_argument(
+        '--moving-average-window', type=int, default=1,
+        help='Simple moving average window for learning curves (default: 1, no averaging)',
+    )
+    parser.add_argument(
+        '--smoothing-window', type=int, default=30,
+        help='uniform_filter1d smoothing window for learning curves (default: 30)',
+    )
 
     args = parser.parse_args()
     output_dir = Path(args.output_dir)
@@ -250,7 +308,11 @@ def main():
         if not data_dir.exists():
             print(f"Error: Data directory not found: {data_dir}")
             sys.exit(1)
-        generate_figures(data_dir, output_dir / 'figures')
+        generate_figures(
+            data_dir, output_dir / 'figures',
+            moving_average_window=args.moving_average_window,
+            smoothing_window=args.smoothing_window,
+        )
     else:
         # Full pipeline
         if not args.sensorimotor_config:
@@ -277,7 +339,11 @@ def main():
             prediction_timing=args.prediction_timing,
         )
 
-        generate_figures(output_dir / 'data', output_dir / 'figures')
+        generate_figures(
+            output_dir / 'data', output_dir / 'figures',
+            moving_average_window=args.moving_average_window,
+            smoothing_window=args.smoothing_window,
+        )
 
 
 if __name__ == '__main__':
