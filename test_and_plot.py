@@ -505,6 +505,7 @@ def run_inference(
     continuation: bool,
     continuation_start_fraction: float = 0.5,
     prediction_timing: str = "after",
+    auditory_only: bool = False,
 ) -> Dict[str, np.ndarray]:
     """
     Run inference on a sequence and collect predictions.
@@ -516,6 +517,7 @@ def run_inference(
         continuation: Whether to enable continuation mode
         continuation_start_fraction: Fraction of sequence after which continuation starts
         prediction_timing: "before" or "after" inference optimization
+        auditory_only: If True, vestibular is NOT given to the inference loop
 
 
     Returns:
@@ -548,6 +550,7 @@ def run_inference(
             beat_input=beat,
             continuation=continuation_flag,
             prediction_timing=prediction_timing,
+            auditory_only=auditory_only,
         )
 
         vest_pred_list.append(result['vest_pred'].squeeze().tolist())
@@ -612,7 +615,9 @@ def test_sensorimotor_model(
     tempo: float,
     continuation: bool,
     prediction_timing: str,
-    logger: ExperimentLogger
+    logger: ExperimentLogger,
+    n_beats: Optional[int] = None,
+    wait_time: float = 0.0,
 ) -> None:
     """
     Test a trained sensorimotor model and generate plots.
@@ -624,6 +629,8 @@ def test_sensorimotor_model(
         continuation: Whether to enable continuation mode
         prediction_timing: "before" or "after" inference optimization
         logger: ExperimentLogger for logging test results
+        n_beats: If set, zero out beat input after this many beats
+        wait_time: Seconds of silence to prepend before input starts
     """
     exp_dir = config_path.parent
 
@@ -652,9 +659,16 @@ def test_sensorimotor_model(
         random_seed=config['experiment']['random_seed']
     )
 
-    # Load saved model
-    checkpoint = torch.load(exp_dir / f'model_step_{model_step}.pt')
-    network.load_state_dict(checkpoint['model_state_dict'])
+    # Load saved model (with backward-compatible key remapping)
+    checkpoint = torch.load(exp_dir / f'model_step_{model_step}.pt', weights_only=False)
+    _KEY_MAP = {
+        'Wrec': 'W_rec',
+        'W_vestibular': 'W_v',
+        'W_beat': 'W_b',
+    }
+    state_dict = checkpoint['model_state_dict']
+    state_dict = {_KEY_MAP.get(k, k): v for k, v in state_dict.items()}
+    network.load_state_dict(state_dict, strict=False)
 
     # Log testing start
     logger.log_testing_start(
@@ -665,10 +679,34 @@ def test_sensorimotor_model(
     )
 
     # Generate test sequences
-    vestibular_seq, beat_seq = generate_input_sequences(
+    result = generate_input_sequences(
         tempo=tempo,
         config=config,
     )
+
+    mode = config['experiment']['mode']
+    if mode == 'beat':
+        beat_seq = result
+        vestibular_seq = torch.zeros_like(beat_seq)
+    else:
+        vestibular_seq, beat_seq = result
+
+    dt = config['experiment']['dt']
+
+    # Prepend silent wait time at the beginning
+    if wait_time > 0:
+        n_wait = int(wait_time / dt)
+        wait_pad_v = torch.zeros(n_wait)
+        wait_pad_b = torch.zeros(n_wait)
+        vestibular_seq = torch.cat([wait_pad_v, vestibular_seq])
+        beat_seq = torch.cat([wait_pad_b, beat_seq])
+
+    # Zero out beat input after n_beats
+    if n_beats is not None:
+        beat_indices = torch.where(beat_seq > 0)[0]
+        if len(beat_indices) >= n_beats:
+            cutoff = beat_indices[n_beats - 1].item() + 1
+            beat_seq[cutoff:] = 0.0
 
     # Run inference
     inference_results = run_inference(
@@ -769,6 +807,18 @@ def test_and_plot() -> None:
         default='after',
         help='When to capture predictions: before or after inference optimization'
     )
+    parser.add_argument(
+        '--n_beats',
+        type=int,
+        default=None,
+        help='Number of beats to provide; beat input becomes 0 after this many beats'
+    )
+    parser.add_argument(
+        '--wait_time',
+        type=float,
+        default=0.0,
+        help='Silent wait time (seconds) at the beginning before input starts'
+    )
     args = parser.parse_args()
 
     # Load config
@@ -794,6 +844,10 @@ def test_and_plot() -> None:
     logger.info(f"Continuation: {args.continuation}")
     logger.info(f"Prediction timing: {args.prediction_timing}")
     logger.info(f"Hierarchy enabled: {use_hierarchy}")
+    if args.n_beats is not None:
+        logger.info(f"N beats: {args.n_beats}")
+    if args.wait_time > 0:
+        logger.info(f"Wait time: {args.wait_time}s")
     logger.info("=" * 60)
 
     # Get tempos to test
@@ -803,7 +857,7 @@ def test_and_plot() -> None:
     # Run tests for each tempo
     mode = config['experiment']['mode']
 
-    if mode in {'sensorimotor', 'doublebeat', 'uncorrelated'}:
+    if mode in {'sensorimotor', 'doublebeat', 'uncorrelated', 'beat'}:
         for tempo in tempo_values:
             test_sensorimotor_model(
                 config_path=config_path,
@@ -811,7 +865,9 @@ def test_and_plot() -> None:
                 tempo=tempo,
                 continuation=args.continuation,
                 prediction_timing=args.prediction_timing,
-                logger=logger
+                logger=logger,
+                n_beats=args.n_beats,
+                wait_time=args.wait_time,
             )
     else:
         raise ValueError(f"Unknown experiment mode: {mode}")
