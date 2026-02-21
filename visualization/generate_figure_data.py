@@ -68,7 +68,17 @@ def load_model(
 
     checkpoint_path = exp_dir / f'model_step_{model_step}.pt'
     checkpoint = torch.load(checkpoint_path, weights_only=False)
-    network.load_state_dict(checkpoint['model_state_dict'])
+
+    # Remap old checkpoint key names to current ones
+    _KEY_MAP = {
+        'Wrec': 'W_rec',
+        'W_vestibular': 'W_v',
+        'W_beat': 'W_b',
+    }
+    state_dict = checkpoint['model_state_dict']
+    state_dict = {_KEY_MAP.get(k, k): v for k, v in state_dict.items()}
+
+    network.load_state_dict(state_dict, strict=False)
 
     return network, config
 
@@ -79,6 +89,7 @@ def run_condition_inference(
     tempo: float,
     continuation: bool = False,
     prediction_timing: str = "after",
+    auditory_only: bool = False,
 ) -> Dict[str, np.ndarray]:
     """
     Run inference for a single condition and return raw arrays.
@@ -92,6 +103,7 @@ def run_condition_inference(
         tempo: Tempo in seconds
         continuation: If True, zero out all input after 50% of sequence
         prediction_timing: "before" or "after" inference optimization
+        auditory_only: If True, vestibular is NOT given to inference loop
 
     Returns:
         Dict with keys: vest_pred, beat_pred, vest_seq, beat_seq,
@@ -113,6 +125,7 @@ def run_condition_inference(
         beat_seq=beat_seq,
         continuation=continuation,
         prediction_timing=prediction_timing,
+        auditory_only=auditory_only,
     )
 
     # Combine input sequences with inference results
@@ -139,6 +152,7 @@ def generate_before_after_data(
     tempo: float,
     continuation: bool = False,
     prediction_timing: str = "after",
+    auditory_only: bool = False,
 ) -> Dict[str, np.ndarray]:
     """
     Generate before/after training comparison data.
@@ -153,6 +167,7 @@ def generate_before_after_data(
         tempo: Tempo in seconds
         continuation: If True, use continuation mode
         prediction_timing: "before" or "after" inference optimization
+        auditory_only: If True, vestibular is NOT given to inference loop
 
     Returns:
         Dict with keys like vest_pred_before, vest_pred_after,
@@ -166,6 +181,7 @@ def generate_before_after_data(
         tempo=tempo,
         continuation=continuation,
         prediction_timing=prediction_timing,
+        auditory_only=auditory_only,
     )
 
     # Run inference at "after" step
@@ -176,6 +192,7 @@ def generate_before_after_data(
         tempo=tempo,
         continuation=continuation,
         prediction_timing=prediction_timing,
+        auditory_only=auditory_only,
     )
 
     # Combine with before/after suffixes
@@ -256,6 +273,37 @@ def load_figure_data(path: Path) -> Dict[str, np.ndarray]:
     return dict(loaded)
 
 
+def _extract_learning_curve_data(exp_dir: Path) -> Dict[str, np.ndarray]:
+    """
+    Extract learning curve data, trying inference error metrics first,
+    then falling back to legacy metric names.
+
+    Returns dict with keys: beat_error_steps, beat_error_values,
+    vest_error_steps, vest_error_values.
+    """
+    # Try newer metric names first
+    lc = extract_tensorboard_learning_curve(
+        exp_dir, metrics=['beat_inference_error', 'vest_inference_error']
+    )
+    if 'beat_inference_error' in lc and 'vest_inference_error' in lc:
+        beat_key = 'beat_inference_error'
+        vest_key = 'vest_inference_error'
+    else:
+        # Fall back to legacy metric names
+        lc = extract_tensorboard_learning_curve(
+            exp_dir, metrics=['beat_error', 'vest_error']
+        )
+        beat_key = 'beat_error'
+        vest_key = 'vest_error'
+
+    return {
+        'beat_error_steps': lc[beat_key]['steps'],
+        'beat_error_values': lc[beat_key]['values'],
+        'vest_error_steps': lc[vest_key]['steps'],
+        'vest_error_values': lc[vest_key]['values'],
+    }
+
+
 def generate_all_figure_data(
     sensorimotor_config: Path,
     before_step: int,
@@ -287,7 +335,7 @@ def generate_all_figure_data(
     data_dir.mkdir(parents=True, exist_ok=True)
 
     has_doublebeat = doublebeat_config is not None and after_step_doublebeat is not None
-    total_steps = 6 if has_doublebeat else 4
+    total_steps = 7 if has_doublebeat else 5
 
     print("=== Generating paper figure data ===")
 
@@ -302,15 +350,18 @@ def generate_all_figure_data(
     )
     save_figure_data(sm_data, data_dir / 'sensorimotor_before_after.npz')
 
-    # Figure 2: Auditory-only before/after (same sensorimotor model)
-    # The network's timestep_inference already ignores vestibular input during
-    # optimization (passes None). The vestibular sequence is only used as
-    # ground truth for plotting. So we use the same model and data.
+    # Figure 2: Auditory-only before/after (same sensorimotor model,
+    # but vestibular is NOT given to the inference loop)
     print(f"[2/{total_steps}] Auditory-only before/after (Figure 2)...")
-    # For auditory-only, we reuse the same data since the inference already
-    # doesn't use vestibular input. The visual difference is in how we
-    # display the vestibular ground truth (dotted, labeled "not provided").
-    save_figure_data(sm_data, data_dir / 'auditory_only_before_after.npz')
+    ao_data = generate_before_after_data(
+        config_path=sensorimotor_config,
+        before_step=before_step,
+        after_step=after_step_sensorimotor,
+        tempo=tempo,
+        prediction_timing=prediction_timing,
+        auditory_only=True,
+    )
+    save_figure_data(ao_data, data_dir / 'auditory_only_before_after.npz')
 
     # Figure 3: Continuation (sensorimotor model, auditory + continuation)
     print(f"[3/{total_steps}] Continuation condition (Figure 3)...")
@@ -324,25 +375,31 @@ def generate_all_figure_data(
     )
     save_figure_data(continuation_data, data_dir / 'continuation.npz')
 
+    # Figure 3b: Continuation auditory-only (same model, vestibular withheld)
+    print(f"[4/{total_steps}] Continuation auditory-only (Figure 3b)...")
+    continuation_ao_data = run_condition_inference(
+        network=network_after,
+        config=config,
+        tempo=tempo,
+        continuation=True,
+        prediction_timing=prediction_timing,
+        auditory_only=True,
+    )
+    save_figure_data(continuation_ao_data, data_dir / 'continuation_auditory_only.npz')
+
     # Figure 1a: Learning curve (sensorimotor)
-    print(f"[4/{total_steps}] Learning curve - sensorimotor (Figure 1a)...")
+    print(f"[5/{total_steps}] Learning curve - sensorimotor (Figure 1a)...")
     sm_exp_dir = Path(sensorimotor_config).parent
     try:
-        sm_lc = extract_tensorboard_learning_curve(
-            sm_exp_dir, metrics=['beat_error', 'vest_error']
-        )
-        lc_data = {}
-        for metric, vals in sm_lc.items():
-            lc_data[f'{metric}_steps'] = vals['steps']
-            lc_data[f'{metric}_values'] = vals['values']
-        save_figure_data(lc_data, data_dir / 'learning_curve_sensorimotor.npz')
+        sm_lc = _extract_learning_curve_data(sm_exp_dir)
+        save_figure_data(sm_lc, data_dir / 'learning_curve_sensorimotor.npz')
     except (FileNotFoundError, ImportError) as e:
         print(f"  Warning: Could not extract TensorBoard data: {e}")
 
     # Doublebeat figures (only if config provided)
     if has_doublebeat:
         # Figure 4: Double auditory before/after
-        print(f"[5/{total_steps}] Double auditory before/after (Figure 4)...")
+        print(f"[6/{total_steps}] Double auditory before/after (Figure 4)...")
         db_data = generate_before_after_data(
             config_path=doublebeat_config,
             before_step=before_step,
@@ -353,17 +410,11 @@ def generate_all_figure_data(
         save_figure_data(db_data, data_dir / 'double_auditory_before_after.npz')
 
         # Figure 4a: Learning curve (doublebeat)
-        print(f"[6/{total_steps}] Learning curve - doublebeat (Figure 4a)...")
+        print(f"[7/{total_steps}] Learning curve - doublebeat (Figure 4a)...")
         db_exp_dir = Path(doublebeat_config).parent
         try:
-            db_lc = extract_tensorboard_learning_curve(
-                db_exp_dir, metrics=['beat_error', 'vest_error']
-            )
-            lc_data = {}
-            for metric, vals in db_lc.items():
-                lc_data[f'{metric}_steps'] = vals['steps']
-                lc_data[f'{metric}_values'] = vals['values']
-            save_figure_data(lc_data, data_dir / 'learning_curve_doublebeat.npz')
+            db_lc = _extract_learning_curve_data(db_exp_dir)
+            save_figure_data(db_lc, data_dir / 'learning_curve_doublebeat.npz')
         except (FileNotFoundError, ImportError) as e:
             print(f"  Warning: Could not extract TensorBoard data: {e}")
     else:
