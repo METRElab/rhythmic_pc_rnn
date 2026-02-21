@@ -411,19 +411,21 @@ class SensorimotorPCRNN(nn.Module):
         vestibular_input: torch.Tensor,
         beat_input: torch.Tensor,
         continuation: bool = False,
-        prediction_timing: str = "after"
+        prediction_timing: str = "after",
+        auditory_only: bool = True,
     ) -> Dict[str, torch.Tensor]:
         """
         Process one inference timestep (no weight updates).
 
-        During inference, vestibular predictions are generated from auditory
-        input alone, demonstrating cross-modal learning.
-
         Args:
-            vestibular_input: Vestibular input (for error computation only)
+            vestibular_input: Vestibular input (used in inference loop unless
+                auditory_only=True, always used for error computation)
             beat_input: Beat sensory input
             continuation: If True, run without sensory input (internal continuation)
             prediction_timing: "before" or "after" inference optimization
+            auditory_only: If True, vestibular input is NOT provided to the
+                inference loop (only beat). If False (default), both vestibular
+                and beat are provided during inference.
 
         Returns:
             Dictionary containing:
@@ -484,14 +486,14 @@ class SensorimotorPCRNN(nn.Module):
         if self.use_hierarchy:
             result_before['e_H'] = errors_before['e_H']
 
-        # Step 4: Inference loop (no vestibular input, only beat)
+        # Step 4: Inference loop
+        vest_for_inference = None if auditory_only else vestibular_input
         for _ in range(self.n_inference_steps):
             if continuation:
-                # No vestibular input and 0 for beat input
+                # No sensory input (internal continuation)
                 self.optimize_states(None, torch.tensor([[0.0]]), mu_H, mu_x)
             else:
-                # Only beat input (vestibular=None to generate prediction)
-                self.optimize_states(None, beat_input, mu_H, mu_x)
+                self.optimize_states(vest_for_inference, beat_input, mu_H, mu_x)
 
         # Step 5: Get final predictions and errors
         predictions = self.compute_predictions()
