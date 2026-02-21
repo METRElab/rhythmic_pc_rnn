@@ -106,6 +106,16 @@ Capture predictions before inference optimization:
 python test_and_plot.py --config experiments/sensorimotor/{exp_name}/config.yaml --model_step 5000 --prediction_timing before
 ```
 
+Limit to a specific number of beats (input zeroed after that beat):
+```bash
+python test_and_plot.py --config experiments/sensorimotor/{exp_name}/config.yaml --model_step 5000 --n_beats 4
+```
+
+Add silent wait time before the input begins:
+```bash
+python test_and_plot.py --config experiments/sensorimotor/{exp_name}/config.yaml --model_step 5000 --wait_time 0.5
+```
+
 Output: `experiments/sensorimotor/{exp_name}/inference_plots/`
 - HTML interactive plots
 - PNG static plots
@@ -134,6 +144,17 @@ Generate all publication-ready figures from trained experiments:
 ```bash
 python -m visualization.make_figures \
     --sensorimotor-config experiments/sensorimotor/{exp_name}/config.yaml \
+    --before-step 0 \
+    --after-step-sensorimotor 7000 \
+    --tempo 0.5 \
+    --output-dir visualization/paper_output
+```
+
+Optionally include the doublebeat control experiment:
+
+```bash
+python -m visualization.make_figures \
+    --sensorimotor-config experiments/sensorimotor/{exp_name}/config.yaml \
     --doublebeat-config experiments/doublebeat/{exp_name}/config.yaml \
     --before-step 0 \
     --after-step-sensorimotor 7000 \
@@ -149,6 +170,17 @@ python -m visualization.make_figures \
     --data-dir visualization/paper_output/data \
     --figures-only \
     --output-dir visualization/paper_output
+```
+
+Control learning curve smoothing:
+
+```bash
+python -m visualization.make_figures \
+    --data-dir visualization/paper_output/data \
+    --figures-only \
+    --output-dir visualization/paper_output \
+    --moving-average-window 10 \
+    --smoothing-window 50
 ```
 
 See `visualization/README.md` for full documentation of the figure pipeline.
