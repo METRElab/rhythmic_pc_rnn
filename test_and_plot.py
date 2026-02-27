@@ -545,6 +545,7 @@ def run_inference(
     for step, (vestibular, beat) in enumerate(zip(vestibular_seq, beat_seq)):
         continuation_flag = continuation and (step > continuation_start)
 
+        print(f"auditory only = {auditory_only}")
         result = network.timestep_inference(
             vestibular_input=vestibular,
             beat_input=beat,
@@ -715,6 +716,7 @@ def test_sensorimotor_model(
         beat_seq=beat_seq,
         continuation=continuation,
         prediction_timing=prediction_timing,
+        auditory_only=True,
     )
 
     # Calculate errors

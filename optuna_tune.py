@@ -6,7 +6,6 @@ on the hierarchical sensorimotor prediction task.
 """
 
 import argparse
-import os
 import yaml
 import optuna
 from optuna.samplers import TPESampler
@@ -20,7 +19,7 @@ import numpy as np
 import torch
 
 from network import SensorimotorPCRNN
-from utils import ExperimentManager, generate_input_sequences, sample_tempo
+from utils import generate_input_sequences, sample_tempo
 from train import calc_inference_error_sensorimotor
 
 
@@ -51,20 +50,19 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     # Layer sizes
     # todo
     # config['network']['higher_size'] = trial.suggest_int('higher_size', 0, 4)
-    config['network']['higher_size'] = 1
+    config['network']['higher_size'] = 0
     config['network']['associative_size'] = trial.suggest_int('associative_size', 16, 64, step=4)
 
     # Timescales
     # todo
-    config['network']['alpha_H'] = trial.suggest_float('alpha_H', 0, 0.1, step=0.01)
-    # config['network']['alpha_H'] = 0
-    config['network']['alpha_x'] = trial.suggest_float('alpha_x', 0.8, 1.0, step=0.01)
+    # config['network']['alpha_H'] = trial.suggest_float('alpha_H', 0, 0.1, step=0.01)
+    # config['network']['alpha_x'] = trial.suggest_float('alpha_x', 0.8, 1.0, step=0.01)
 
     # Inference learning rates
     # todo
-    config['network']['inference_learning_rate_H'] = trial.suggest_float(
-        'inference_learning_rate_H', 0.001, 0.5, log=True
-    )
+    # config['network']['inference_learning_rate_H'] = trial.suggest_float(
+    #     'inference_learning_rate_H', 0.001, 0.5, log=True
+    # )
     # config['network']['inference_learning_rate_H'] = 0
     config['network']['inference_learning_rate_x'] = trial.suggest_float(
         'inference_learning_rate_x', 0.001, 0.5, log=True
@@ -72,9 +70,9 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
 
     # Weight learning rates
     # todo
-    config['network']['weight_learning_rate_H'] = trial.suggest_float(
-        'weight_learning_rate_H', 0.001, 0.5, log=True
-    )
+    # config['network']['weight_learning_rate_H'] = trial.suggest_float(
+    #     'weight_learning_rate_H', 0.001, 0.5, log=True
+    # )
     # config['network']['weight_learning_rate_H'] = 0
     config['network']['weight_learning_rate_x'] = trial.suggest_float(
         'weight_learning_rate_x', 0.001, 0.5, log=True
@@ -89,113 +87,98 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     # Create a temporary experiment name for this trial
     config['experiment']['name'] = f"optuna_trial_{trial.number}"
 
-    # Initialize experiment manager with the modified config
-    temp_config_path = f"temp_config_trial_{trial.number}.yaml"
-    with open(temp_config_path, 'w') as f:
-        yaml.dump(config, f)
-
     # Setting random seed for all libraries
     seed = config["experiment"]["random_seed"]
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    try:
-        exp_manager = ExperimentManager(temp_config_path)
-        net_config = config['network']
+    net_config = config['network']
 
-        # Create network with trial parameters
-        network = SensorimotorPCRNN(
-            higher_size=net_config['higher_size'],
-            associative_size=net_config['associative_size'],
-            vestibular_size=net_config['vestibular_size'],
-            alpha_H=net_config['alpha_H'],
-            alpha_x=net_config['alpha_x'],
-            inference_learning_rate_H=net_config['inference_learning_rate_H'],
-            inference_learning_rate_x=net_config['inference_learning_rate_x'],
-            weight_learning_rate_H=net_config['weight_learning_rate_H'],
-            weight_learning_rate_x=net_config['weight_learning_rate_x'],
-            n_inference_steps=net_config['n_inference_steps'],
-            random_seed=config["experiment"]["random_seed"]
-        )
+    # Create network with trial parameters
+    network = SensorimotorPCRNN(
+        higher_size=net_config['higher_size'],
+        associative_size=net_config['associative_size'],
+        vestibular_size=net_config['vestibular_size'],
+        alpha_H=net_config['alpha_H'],
+        alpha_x=net_config['alpha_x'],
+        inference_learning_rate_H=net_config['inference_learning_rate_H'],
+        inference_learning_rate_x=net_config['inference_learning_rate_x'],
+        weight_learning_rate_H=net_config['weight_learning_rate_H'],
+        weight_learning_rate_x=net_config['weight_learning_rate_x'],
+        n_inference_steps=net_config['n_inference_steps'],
+        random_seed=config["experiment"]["random_seed"]
+    )
 
-        # Generate initial input sequences for step counting
-        initial_tempo = sample_tempo(config)
-        _, beat_seq = generate_input_sequences(
-            tempo=initial_tempo,
-            dt=config['experiment']['dt'],
-            duration=config['experiment']['duration'],
-            vestibular_size=net_config['vestibular_size'],
-            mode=config['experiment']['mode']
-        )
-        n_steps_per_round = len(beat_seq)
+    # Generate initial input sequences for step counting
+    initial_tempo = sample_tempo(config)
+    result = generate_input_sequences(config=config, tempo=initial_tempo)
+    if isinstance(result, tuple):
+        _, beat_seq = result
+    else:
+        beat_seq = result
+    n_steps_per_round = len(beat_seq)
 
-        # Initialize error tracking
-        accumulated_vest_error = 0.0
-        accumulated_beat_error = 0.0
-        steps_since_last_log = 0
-        min_inference_error = np.inf
+    # Initialize error tracking
+    accumulated_vest_error = 0.0
+    accumulated_beat_error = 0.0
+    steps_since_last_log = 0
+    min_inference_error = np.inf
 
-        # Training loop
-        for round_idx in range(config['experiment']['n_training_rounds']):
-            network.reset_states()
+    # Training loop
+    for round_idx in range(config['experiment']['n_training_rounds']):
+        network.reset_states()
 
-            # Sample tempo for this round
-            tempo = sample_tempo(config)
+        # Sample tempo for this round
+        tempo = sample_tempo(config)
 
-            # Generate input sequences
-            vestibular_seq, beat_seq = generate_input_sequences(
-                tempo=tempo,
-                dt=config['experiment']['dt'],
-                duration=config['experiment']['duration'],
-                vestibular_size=net_config['vestibular_size'],
-                mode=config['experiment']['mode']
-            )
+        # Generate input sequences
+        result = generate_input_sequences(config=config, tempo=tempo)
+        mode = config['experiment']['mode']
+        if mode == 'beat':
+            beat_seq = result
+            vestibular_seq = torch.zeros_like(beat_seq)
+        else:
+            vestibular_seq, beat_seq = result
 
-            n_steps = len(beat_seq)
+        n_steps = len(beat_seq)
 
-            for step in range(n_steps):
-                global_step = round_idx * n_steps_per_round + step
+        for step in range(n_steps):
+            global_step = round_idx * n_steps_per_round + step
 
-                # Get current inputs
-                beat = beat_seq[step]
-                vestibular = vestibular_seq[step]
+            # Get current inputs
+            beat = beat_seq[step]
+            vestibular = vestibular_seq[step]
 
-                # Training step
-                result = network.timestep_train(vestibular, beat)
+            # Training step
+            result = network.timestep_train(vestibular, beat)
 
-                # Accumulate errors
-                accumulated_vest_error += ((vestibular - result['vest_pred'].squeeze()) ** 2).sum().item()
-                accumulated_beat_error += ((beat - result['beat_pred'].squeeze()) ** 2).sum().item()
-                steps_since_last_log += 1
+            # Accumulate errors
+            accumulated_vest_error += ((vestibular - result['vest_pred'].squeeze()) ** 2).sum().item()
+            accumulated_beat_error += ((beat - result['beat_pred'].squeeze()) ** 2).sum().item()
+            steps_since_last_log += 1
 
-                # Report intermediate values for pruning
-                # if global_step % 200 == 0 and steps_since_last_log > 0:
-                if global_step % 1000 == 0 and steps_since_last_log > 0:
-                    inference_errors = calc_inference_error_sensorimotor(network, config)
-                    current_inference_error = inference_errors['vest_inference_error']
+            # Report intermediate values for pruning
+            if global_step % 1000 == 0 and steps_since_last_log > 0:
+                inference_errors = calc_inference_error_sensorimotor(network, config)
+                current_inference_error = inference_errors['vest_inference_error']
 
-                    if current_inference_error < min_inference_error:
-                        min_inference_error = current_inference_error
+                if current_inference_error < min_inference_error:
+                    min_inference_error = current_inference_error
 
-                    avg_vest_error = accumulated_vest_error / steps_since_last_log
-                    trial.report(avg_vest_error, global_step)
+                avg_vest_error = accumulated_vest_error / steps_since_last_log
+                trial.report(avg_vest_error, global_step)
 
-                    # Reset accumulators
-                    accumulated_vest_error = 0.0
-                    accumulated_beat_error = 0.0
-                    steps_since_last_log = 0
+                # Reset accumulators
+                accumulated_vest_error = 0.0
+                accumulated_beat_error = 0.0
+                steps_since_last_log = 0
 
-                    # Enable early stopping if the trial is not promising
-                    if trial.should_prune():
-                        raise optuna.exceptions.TrialPruned()
+                # Enable early stopping if the trial is not promising
+                if trial.should_prune():
+                    raise optuna.exceptions.TrialPruned()
 
-        return min_inference_error
-
-    finally:
-        # Clean up temporary config file
-        if os.path.exists(temp_config_path):
-            os.remove(temp_config_path)
+    return min_inference_error
 
 
 def save_best_config(
@@ -219,27 +202,12 @@ def save_best_config(
     best_params = study.best_params
     best_config = copy.deepcopy(base_config)
 
-    # Update config with best parameters
-    best_config['experiment']['random_seed'] = best_params.get("random_seed", None)
-
-    # Layer sizes
-    best_config['network']['higher_size'] = best_params.get("higher_size", base_config['network']['higher_size'])
-    best_config['network']['associative_size'] = best_params.get("associative_size", None)
-
-    # Timescales
-    best_config['network']['alpha_H'] = best_params.get("alpha_H", None)
-    best_config['network']['alpha_x'] = best_params.get("alpha_x", None)
-
-    # Inference learning rates
-    best_config['network']['inference_learning_rate_H'] = best_params.get("inference_learning_rate_H", None)
-    best_config['network']['inference_learning_rate_x'] = best_params.get("inference_learning_rate_x", None)
-
-    # Weight learning rates
-    best_config['network']['weight_learning_rate_H'] = best_params.get("weight_learning_rate_H", None)
-    best_config['network']['weight_learning_rate_x'] = best_params.get("weight_learning_rate_x", None)
-
-    # Inference steps
-    best_config['network']['n_inference_steps'] = best_params.get("n_inference_steps", None)
+    # Update config with best parameters (only those that were tuned)
+    for key in best_params:
+        if key in best_config['network']:
+            best_config['network'][key] = best_params[key]
+        elif key in best_config.get('experiment', {}):
+            best_config['experiment'][key] = best_params[key]
 
     # Add timestamp and best trial info to experiment name
     best_config['experiment']['name'] = (
