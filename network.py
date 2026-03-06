@@ -413,6 +413,7 @@ class SensorimotorPCRNN(nn.Module):
         continuation: bool = False,
         prediction_timing: str = "after",
         auditory_only: bool = True,
+        beat_baseline: float = 0.0,
     ) -> Dict[str, torch.Tensor]:
         """
         Process one inference timestep (no weight updates).
@@ -426,6 +427,9 @@ class SensorimotorPCRNN(nn.Module):
             auditory_only: If True, vestibular input is NOT provided to the
                 inference loop (only beat). If False (default), both vestibular
                 and beat are provided during inference.
+            beat_baseline: Baseline value for auditory input during continuation.
+                For standard mode this is 0.0; for zero_mean_beat mode this is
+                the negative flat value (e.g. -0.1).
 
         Returns:
             Dictionary containing:
@@ -490,8 +494,8 @@ class SensorimotorPCRNN(nn.Module):
         vest_for_inference = None if auditory_only else vestibular_input
         for _ in range(self.n_inference_steps):
             if continuation:
-                # No sensory input (internal continuation)
-                self.optimize_states(None, torch.tensor([[0.0]]), mu_H, mu_x)
+                # No sensory input — use baseline (0 for standard, negative for zero-mean)
+                self.optimize_states(None, torch.tensor([[beat_baseline]]), mu_H, mu_x)
             else:
                 self.optimize_states(vest_for_inference, beat_input, mu_H, mu_x)
 

@@ -190,6 +190,9 @@ def generate_input_sequences(
             - experiment.duration: Total sequence duration in seconds
             - experiment.mode: Input mode ('sensorimotor', 'doublebeat', 'beat', 'uncorrelated')
             - experiment.random_audio (optional): Config for random pulses
+            - experiment.zero_mean_beat (optional): If true, transform beat pulses to
+              be zero-mean per period. Flat value = -1/steps_per_period, pulse value =
+              (steps_per_period-1)/steps_per_period. Works with any mode.
         tempo: Time between beats in seconds
         rng: NumPy random generator for reproducibility (used in 'uncorrelated' mode)
 
@@ -227,6 +230,16 @@ def generate_input_sequences(
     beat_sequence = np.zeros(n_steps)
     beat_sequence[beat_indices] = 1
     beat_sequence = torch.FloatTensor(beat_sequence)
+
+    # Zero-mean transform: shift beat pulses so the per-period average is 0
+    zero_mean_beat = exp_config.get('zero_mean_beat', False)
+    if zero_mean_beat:
+        steps_per_period = round(tempo / dt)
+        flat_value = -1.0 / steps_per_period
+        pulse_value = (steps_per_period - 1.0) / steps_per_period
+        pulse_mask = beat_sequence > 0.5
+        beat_sequence[~pulse_mask] = flat_value
+        beat_sequence[pulse_mask] = pulse_value
 
     if mode == "beat":
         return beat_sequence
@@ -317,6 +330,12 @@ def generate_input_sequences(
             raise ValueError(
                 f"Unknown distribution: {distribution}. Must be 'uniform', 'poisson', or 'white_noise'."
             )
+
+        # Apply zero-mean transform to random beat sequence if requested
+        if zero_mean_beat:
+            pulse_mask = random_beat_sequence > 0.5
+            random_beat_sequence[~pulse_mask] = flat_value
+            random_beat_sequence[pulse_mask] = pulse_value
 
         return vestibular_sequence, random_beat_sequence
 
