@@ -48,6 +48,10 @@ def has_randomness(config):
     if mode == 'uncorrelated':
         return True
 
+    # Random starting phase
+    if exp.get('random_phase', False):
+        return True
+
     return False
 
 

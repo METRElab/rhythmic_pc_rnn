@@ -49,7 +49,10 @@ def get_tempo_values(config: Dict[str, Any]) -> List[float]:
         raise ValueError(f"Unknown tempo mode: {mode}. Must be 'single' or 'range'.")
 
 
-def sample_tempo(config: Dict[str, Any]) -> float:
+def sample_tempo(
+    config: Dict[str, Any],
+    rng: Optional[np.random.Generator] = None,
+) -> float:
     """
     Sample a single tempo value based on configuration.
 
@@ -58,6 +61,8 @@ def sample_tempo(config: Dict[str, Any]) -> float:
 
     Args:
         config: Experiment configuration dictionary
+        rng: NumPy random generator for reproducibility. If None,
+            creates a new unseeded generator.
 
     Returns:
         A single tempo value
@@ -67,7 +72,9 @@ def sample_tempo(config: Dict[str, Any]) -> float:
     if len(tempos) == 1:
         return tempos[0]
     else:
-        return float(np.random.choice(tempos))
+        if rng is None:
+            rng = np.random.default_rng()
+        return float(rng.choice(tempos))
 
 
 def generate_random_pulses(
@@ -193,8 +200,11 @@ def generate_input_sequences(
             - experiment.zero_mean_beat (optional): If true, transform beat pulses to
               be zero-mean per period. Flat value = -1/steps_per_period, pulse value =
               (steps_per_period-1)/steps_per_period. Works with any mode.
+            - experiment.random_phase (optional): If true, each sequence starts at a
+              random phase within the cycle instead of always starting at a beat.
         tempo: Time between beats in seconds
-        rng: NumPy random generator for reproducibility (used in 'uncorrelated' mode)
+        rng: NumPy random generator for reproducibility (used in 'uncorrelated' mode
+            and 'random_phase')
 
     Returns:
         For 'beat' mode: beat_sequence tensor of shape [n_steps]
@@ -223,8 +233,16 @@ def generate_input_sequences(
     n_steps = int(duration / dt)
     t = np.arange(0, duration, dt)
 
+    # Random starting phase: offset the cycle so sequences don't always start at a beat
+    random_phase = exp_config.get('random_phase', False)
+    if random_phase:
+        phase_rng = rng if rng is not None else np.random.default_rng()
+        phi = float(phase_rng.uniform(0, tempo))
+    else:
+        phi = 0.0
+
     # Beat sequence: binary pulse train (regular, correlated with vestibular)
-    beat_times = np.arange(0, duration, tempo)
+    beat_times = np.arange(phi, duration, tempo)
     beat_indices = np.round(beat_times / dt).astype(int)
     beat_indices = beat_indices[beat_indices < n_steps]
     beat_sequence = np.zeros(n_steps)
@@ -250,7 +268,8 @@ def generate_input_sequences(
     elif mode == "sensorimotor":
         # Regular vestibular triangular wave, synchronized with beats
         frequency = 1 / tempo
-        sawtooth = 2 * (t * frequency - np.floor(0.5 + t * frequency))
+        t_shifted = t - phi
+        sawtooth = 2 * (t_shifted * frequency - np.floor(0.5 + t_shifted * frequency))
         vestibular_tri = 1 - 2 * np.abs(sawtooth)
         vestibular_sequence = torch.FloatTensor(vestibular_tri)
         return vestibular_sequence, beat_sequence
@@ -258,7 +277,8 @@ def generate_input_sequences(
     elif mode == "uncorrelated":
         # Regular vestibular triangular wave (same as sensorimotor)
         frequency = 1 / tempo
-        sawtooth = 2 * (t * frequency - np.floor(0.5 + t * frequency))
+        t_shifted = t - phi
+        sawtooth = 2 * (t_shifted * frequency - np.floor(0.5 + t_shifted * frequency))
         vestibular_tri = 1 - 2 * np.abs(sawtooth)
         vestibular_sequence = torch.FloatTensor(vestibular_tri)
 

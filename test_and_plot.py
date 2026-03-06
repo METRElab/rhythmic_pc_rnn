@@ -467,10 +467,12 @@ def test_sensorimotor_model(
         prediction_timing=prediction_timing
     )
 
-    # Generate test sequences
+    # Generate test sequences (use a seeded rng for reproducibility)
+    test_rng = np.random.default_rng(config['experiment'].get('random_seed', 42))
     result = generate_input_sequences(
         tempo=tempo,
         config=config,
+        rng=test_rng,
     )
 
     mode = config['experiment']['mode']

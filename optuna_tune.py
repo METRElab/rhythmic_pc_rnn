@@ -92,6 +92,7 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    rng = np.random.default_rng(seed)
 
     net_config = config['network']
 
@@ -111,8 +112,8 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     )
 
     # Generate initial input sequences for step counting
-    initial_tempo = sample_tempo(config)
-    result = generate_input_sequences(config=config, tempo=initial_tempo)
+    initial_tempo = sample_tempo(config, rng=rng)
+    result = generate_input_sequences(config=config, tempo=initial_tempo, rng=rng)
     if isinstance(result, tuple):
         _, beat_seq = result
     else:
@@ -130,10 +131,10 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
         network.reset_states()
 
         # Sample tempo for this round
-        tempo = sample_tempo(config)
+        tempo = sample_tempo(config, rng=rng)
 
         # Generate input sequences
-        result = generate_input_sequences(config=config, tempo=tempo)
+        result = generate_input_sequences(config=config, tempo=tempo, rng=rng)
         mode = config['experiment']['mode']
         if mode == 'beat':
             beat_seq = result

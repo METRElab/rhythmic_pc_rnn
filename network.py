@@ -134,6 +134,9 @@ class SensorimotorPCRNN(nn.Module):
         """
         Initialize weights with small random values.
 
+        Uses a local torch Generator to avoid polluting the global
+        random state (which would affect all subsequent torch operations).
+
         Args:
             out_size: Output dimension
             in_size: Input dimension
@@ -141,8 +144,9 @@ class SensorimotorPCRNN(nn.Module):
         Returns:
             Initialized weight tensor of shape [out_size, in_size]
         """
-        torch.manual_seed(self.random_seed)
-        return torch.randn(out_size, in_size) * 0.05
+        gen = torch.Generator()
+        gen.manual_seed(self.random_seed)
+        return torch.randn(out_size, in_size, generator=gen) * 0.05
 
     @staticmethod
     def _tanh_derivative(x: torch.Tensor) -> torch.Tensor:

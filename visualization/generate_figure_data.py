@@ -109,7 +109,9 @@ def run_condition_inference(
         Dict with keys: vest_pred, beat_pred, vest_seq, beat_seq,
         e_v, e_b, e_x, and optionally e_H
     """
-    result = generate_input_sequences(config=config, tempo=tempo)
+    # Use a seeded rng for reproducible figure data
+    fig_rng = np.random.default_rng(config['experiment'].get('random_seed', 42))
+    result = generate_input_sequences(config=config, tempo=tempo, rng=fig_rng)
 
     mode = config['experiment']['mode']
     dt = config['experiment']['dt']

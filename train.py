@@ -51,6 +51,10 @@ def calc_inference_error_sensorimotor(
 
     use_hierarchy = network.use_hierarchy
 
+    # Use a separate rng for evaluation so it doesn't perturb training rng
+    eval_seed = config['experiment'].get('random_seed', 42)
+    eval_rng = np.random.default_rng(eval_seed)
+
     tempos = get_tempo_values(config)
     for tempo in tempos:
         for _ in range(config["testing"]["n_inference_rounds"]):
@@ -60,6 +64,7 @@ def calc_inference_error_sensorimotor(
             test_vestibular_seq, test_beat_seq = generate_input_sequences(
                 tempo=tempo,
                 config=config,
+                rng=eval_rng,
             )
 
             # Run inference for each timestep
@@ -135,10 +140,13 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
     exp_manager.logger.info(f"Hierarchy enabled: {use_hierarchy}")
 
     # Calculate steps per round (using first tempo for reference)
+    # Use a throwaway rng so we don't advance the training rng
     reference_tempo = tempo_values[0]
+    ref_rng = np.random.default_rng(seed)
     _, reference_beat_seq = generate_input_sequences(
         tempo=reference_tempo,
         config=config,
+        rng=ref_rng,
     )
     n_steps_per_round = len(reference_beat_seq)
 
@@ -155,12 +163,13 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
         network.reset_states()
 
         # Sample tempo for this training round
-        tempo = sample_tempo(config)
+        tempo = sample_tempo(config, rng=exp_manager.rng)
 
         # Generate input sequences for this round
         vestibular_seq, beat_seq = generate_input_sequences(
             tempo=tempo,
             config=config,
+            rng=exp_manager.rng,
         )
 
         n_steps = len(beat_seq)
