@@ -378,9 +378,16 @@ def plot_continuation(
 
     time = np.arange(len(pred_vest))
 
-    # Modify beat input to show zeros after transition
+    # Detect beat baseline from non-pulse values (negative for zero-mean mode, 0 otherwise)
+    non_pulse_mask = beat_input[:transition_point] < 0.5
+    if non_pulse_mask.any():
+        beat_baseline = float(np.median(beat_input[:transition_point][non_pulse_mask]))
+    else:
+        beat_baseline = 0.0
+
+    # Modify beat input to show baseline after transition
     beat_input_modified = beat_input.copy()
-    beat_input_modified[transition_point:] = 0
+    beat_input_modified[transition_point:] = beat_baseline
 
     # Compute y-axis limits: include both input and prediction ranges so
     # nothing is cropped, while keeping the input scale visible for comparison.
@@ -395,10 +402,16 @@ def plot_continuation(
 
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=figsize, sharex=True)
 
+    # Build title suffix depending on whether baseline is zero or negative
+    if abs(beat_baseline) < 1e-9:
+        baseline_desc = 'Set to Zero'
+    else:
+        baseline_desc = f'Set to Baseline ({beat_baseline:.2f})'
+
     # --- Top: Auditory input ---
     ax1.plot(time, beat_input_modified, 'b-', linewidth=1.5, label='Auditory Input')
     ax1.set_ylabel('Auditory Input')
-    ax1.set_title('Auditory Input (Set to Zero After Transition)')
+    ax1.set_title(f'Auditory Input ({baseline_desc} After Transition)')
     ax1.legend(loc='upper right')
     ax1.grid(True, alpha=STYLES['grid_alpha'])
     ax1.set_ylim(beat_ylim)
@@ -407,7 +420,7 @@ def plot_continuation(
     ax2.plot(time, pred_vest, color=COLORS['vest_pred'], linewidth=3,
              label='Predicted Vestibular Movement')
     ax2.set_ylabel('Vestibular Signal')
-    ax2.set_title('Vestibular Continuation After Auditory Input Set to Zero')
+    ax2.set_title(f'Vestibular Continuation After Auditory Input {baseline_desc}')
     ax2.legend(loc='upper right')
     ax2.grid(True, alpha=STYLES['grid_alpha'])
     ax2.set_ylim(vest_ylim)
@@ -417,23 +430,25 @@ def plot_continuation(
              label='Predicted Auditory')
     ax3.set_xlabel('Time Step')
     ax3.set_ylabel('Auditory Signal')
-    ax3.set_title('Auditory Continuation After Input Set to Zero')
+    ax3.set_title(f'Auditory Continuation After Input {baseline_desc}')
     ax3.legend(loc='upper right')
     ax3.grid(True, alpha=STYLES['grid_alpha'])
     ax3.set_ylim(beat_ylim)
 
     # Transition marker
+    transition_label = 'Input Set to Baseline' if abs(beat_baseline) > 1e-9 else 'Input Set to Zero'
     for ax in [ax1, ax2, ax3]:
         ax.axvline(
             x=transition_point, color=COLORS['transition'],
-            linestyle='--', linewidth=2, alpha=0.8, label='Input Set to Zero',
+            linestyle='--', linewidth=2, alpha=0.8, label=transition_label,
         )
 
     # Shaded regions
+    no_input_label = 'Baseline Input Period' if abs(beat_baseline) > 1e-9 else 'Zero Input Period'
     ax1.axvspan(0, transition_point, alpha=0.1, color=COLORS['input_region'],
                 label='Input Period')
     ax1.axvspan(transition_point, len(time), alpha=0.1, color=COLORS['no_input_region'],
-                label='Zero Input Period')
+                label=no_input_label)
 
     for ax in [ax2, ax3]:
         ax.axvspan(0, transition_point, alpha=0.1, color=COLORS['input_region'],

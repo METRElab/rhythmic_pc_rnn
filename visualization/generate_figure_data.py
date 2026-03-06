@@ -112,12 +112,21 @@ def run_condition_inference(
     result = generate_input_sequences(config=config, tempo=tempo)
 
     mode = config['experiment']['mode']
+    dt = config['experiment']['dt']
     if mode == 'beat':
         beat_seq = result
         # Create zero vestibular for beat-only mode
         vestibular_seq = torch.zeros_like(beat_seq)
     else:
         vestibular_seq, beat_seq = result
+
+    # Compute beat baseline for zero-mean mode
+    zero_mean_beat = config['experiment'].get('zero_mean_beat', False)
+    if zero_mean_beat:
+        steps_per_period = round(tempo / dt)
+        beat_baseline = -1.0 / steps_per_period
+    else:
+        beat_baseline = 0.0
 
     inference_results = run_inference(
         network=network,
@@ -126,6 +135,7 @@ def run_condition_inference(
         continuation=continuation,
         prediction_timing=prediction_timing,
         auditory_only=auditory_only,
+        beat_baseline=beat_baseline,
     )
 
     # Combine input sequences with inference results

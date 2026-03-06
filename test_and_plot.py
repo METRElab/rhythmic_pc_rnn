@@ -24,269 +24,31 @@ def generate_plot_filename(
     tempo: float,
     prediction_timing: str,
     continuation: bool,
+    auditory_only: bool = False,
     extension: str = "html"
 ) -> str:
     """
-    Generate a standardized plot filename based on test parameters.
+    Generate a compact plot filename based on test parameters.
+
+    Format: s{step}_t{tempo}_{timing}[_cont][_ao].{ext}
 
     Args:
         model_step: Step of the loaded model
         tempo: Tempo value used in testing
         prediction_timing: "before" or "after" inference optimization
         continuation: Whether continuation mode was used
+        auditory_only: Whether auditory-only mode was used
         extension: File extension (html or png)
 
     Returns:
         Formatted filename string
     """
-    continuation_suffix = "with_continuation" if continuation else "no_continuation"
-    filename = (
-        f"inference_plot_step_{model_step}_"
-        f"tempo_{tempo}_"
-        f"{prediction_timing}_inference_"
-        f"{continuation_suffix}.{extension}"
-    )
-    return filename
-
-#
-# def plot_inference_sequence_sensorimotor(
-#     vestibular_seq: torch.Tensor,
-#     beat_seq: torch.Tensor,
-#     vestibular_predicted_seq: np.ndarray,
-#     beat_predicted_seq: np.ndarray,
-#     e_v_seq: np.ndarray,
-#     e_b_seq: np.ndarray,
-#     save_path_html: Path,
-#     save_path_png: Optional[Path] = None
-# ) -> None:
-#     """
-#     Plot inference sequences with Plotly in six subplots.
-#
-#     Creates an interactive visualization showing actual vs predicted
-#     signals for both vestibular and beat modalities, plus prediction errors.
-#
-#     Args:
-#         vestibular_seq: Actual vestibular input tensor of shape [n_steps] or [n_steps, 2]
-#         beat_seq: Actual beat input tensor of shape [n_steps]
-#         vestibular_predicted_seq: Predicted vestibular array of shape [n_steps] or [n_steps, 2]
-#         beat_predicted_seq: Predicted beat array of shape [n_steps]
-#         e_v_seq: Vestibular prediction error array
-#         e_b_seq: Beat prediction error array
-#         save_path_html: Path to save interactive HTML plot
-#         save_path_png: Optional path to save static PNG plot
-#     """
-#     # Convert to NumPy if still torch.Tensor
-#     if hasattr(vestibular_predicted_seq, 'numpy'):
-#         vestibular_predicted_seq = vestibular_predicted_seq.numpy()
-#
-#     if hasattr(beat_predicted_seq, 'numpy'):
-#         beat_predicted_seq = beat_predicted_seq.numpy()
-#
-#     # Time axis
-#     n_steps = len(beat_seq)
-#     t = list(range(n_steps))
-#
-#     # Create subplots: 6 rows, 1 column
-#     fig = make_subplots(
-#         rows=6, cols=1,
-#         subplot_titles=[
-#             "Beat Sequence",
-#             "Predicted Beat",
-#             "Error of Predicted Beat",
-#             "Actual Vestibular Movement",
-#             "Predicted Vestibular Movement",
-#             "Error of Vestibular Movement"
-#         ],
-#         shared_xaxes=True,
-#         vertical_spacing=0.05
-#     )
-#
-#     # --- Row 1: Beat Sequence ---
-#     fig.add_trace(
-#         go.Scatter(
-#             x=t,
-#             y=beat_seq.cpu().numpy(),
-#             mode='lines+markers',
-#             name='Beat',
-#             marker=dict(color='red')
-#         ),
-#         row=1, col=1
-#     )
-#
-#     # --- Row 2: Predicted Beat Sequence ---
-#     fig.add_trace(
-#         go.Scatter(
-#             x=t,
-#             y=beat_predicted_seq,
-#             mode='lines+markers',
-#             name='Predicted Beat',
-#             marker=dict(color='purple')
-#         ),
-#         row=2, col=1
-#     )
-#
-#     # --- Row 3: Error of Predicted Beat ---
-#     fig.add_trace(
-#         go.Scatter(
-#             x=t,
-#             y=e_b_seq,
-#             mode='lines+markers',
-#             name='Error of Predicted Beat',
-#             line=dict(dash='dash', color='purple'),
-#             marker=dict(color='purple')
-#         ),
-#         row=3, col=1
-#     )
-#
-#     # Handle 1D or 2D vestibular sequences
-#     if vestibular_seq.ndim == 2:
-#         # --- Row 4: Actual Vestibular Movement (2 channels) ---
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=t,
-#                 y=vestibular_seq[:, 0].cpu().numpy(),
-#                 mode='lines',
-#                 name='Vestibular ch0',
-#                 line=dict(color='blue')
-#             ),
-#             row=4, col=1
-#         )
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=t,
-#                 y=vestibular_seq[:, 1].cpu().numpy(),
-#                 mode='lines',
-#                 name='Vestibular ch1',
-#                 line=dict(color='cyan')
-#             ),
-#             row=4, col=1
-#         )
-#
-#         # --- Row 5: Predicted Vestibular Movement (2 channels) ---
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=t,
-#                 y=vestibular_predicted_seq[:, 0],
-#                 mode='lines',
-#                 name='Predicted ch0',
-#                 line=dict(color='green')
-#             ),
-#             row=5, col=1
-#         )
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=t,
-#                 y=vestibular_predicted_seq[:, 1],
-#                 mode='lines',
-#                 name='Predicted ch1',
-#                 line=dict(color='magenta')
-#             ),
-#             row=5, col=1
-#         )
-#
-#         # --- Row 6: Error of Predicted Vestibular Movement (2 channels) ---
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=t,
-#                 y=e_v_seq[:, 0],
-#                 mode='lines',
-#                 name='Error ch0',
-#                 line=dict(dash='dash', color='green'),
-#             ),
-#             row=6, col=1
-#         )
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=t,
-#                 y=e_v_seq[:, 1],
-#                 mode='lines',
-#                 name='Error ch1',
-#                 line=dict(dash='dash', color='magenta')
-#             ),
-#             row=6, col=1
-#         )
-#
-#     else:
-#         # --- Row 4: Actual Vestibular Movement (1 channel) ---
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=t,
-#                 y=vestibular_seq.cpu().numpy(),
-#                 mode='lines',
-#                 name='Vestibular',
-#                 line=dict(color='blue')
-#             ),
-#             row=4, col=1
-#         )
-#
-#         # --- Row 5: Predicted Vestibular Movement (1 channel) ---
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=t,
-#                 y=vestibular_predicted_seq,
-#                 mode='lines',
-#                 name='Predicted Vestibular',
-#                 line=dict(color='magenta')
-#             ),
-#             row=5, col=1
-#         )
-#
-#         # --- Row 6: Error of Predicted Vestibular Movement (1 channel) ---
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=t,
-#                 y=e_v_seq,
-#                 mode='lines',
-#                 name='Error Vestibular',
-#                 line=dict(dash='dash', color='magenta'),
-#             ),
-#             row=6, col=1
-#         )
-#
-#     # Add vertical lines at beat times on rows 2-6
-#     beat_times = [i for i, beat in enumerate(beat_seq) if beat.item() > 0]
-#     for b in beat_times:
-#         for row in range(2, 7):
-#             fig.add_vline(
-#                 x=b,
-#                 line_width=1,
-#                 line_dash='dash',
-#                 line_color='red',
-#                 row=row,
-#                 col=1
-#             )
-#
-#     # Layout settings
-#     fig.update_layout(
-#         title='Inference Results',
-#         height=1500,
-#         width=3000,
-#         showlegend=True
-#     )
-#
-#     # Update y-axis labels
-#     y_labels = [
-#         "Beat",
-#         "Pred Beat",
-#         "Beat Error",
-#         "Vestibular",
-#         "Pred Vestibular",
-#         "Vest Error"
-#     ]
-#     for i, label in enumerate(y_labels, start=1):
-#         fig.update_yaxes(
-#             title_text=label,
-#             row=i, col=1,
-#             automargin=True
-#         )
-#
-#     # Save interactive HTML
-#     fig.write_html(str(save_path_html), auto_open=False)
-#
-#     # Optionally save high-res static PNG
-#     if save_path_png is not None:
-#         fig.write_image(str(save_path_png), scale=3)
-#
+    parts = [f"s{model_step}", f"t{tempo}", prediction_timing]
+    if continuation:
+        parts.append("cont")
+    if auditory_only:
+        parts.append("ao")
+    return "_".join(parts) + f".{extension}"
 
 
 def plot_inference_sequence_sensorimotor(
@@ -298,6 +60,7 @@ def plot_inference_sequence_sensorimotor(
     e_b_seq: np.ndarray,
     save_path_html: Path,
     save_path_png: Optional[Path] = None,
+    annotation_text: Optional[str] = None,
 ) -> None:
     """
     Plot inference sequences with Plotly in four subplots.
@@ -314,6 +77,8 @@ def plot_inference_sequence_sensorimotor(
         e_b_seq: Beat prediction error array (unused, kept for API compatibility)
         save_path_html: Path to save interactive HTML plot
         save_path_png: Optional path to save static PNG plot
+        annotation_text: Optional text to display at the bottom of the figure
+            (e.g. input parameters, notes)
     """
     from scipy.signal import find_peaks
 
@@ -476,9 +241,27 @@ def plot_inference_sequence_sensorimotor(
             )
 
     # Layout settings
-    fig.update_layout(
+    layout_kwargs = dict(
         title="Inference Results", height=1000, width=3000, showlegend=True
     )
+
+    # Add bottom annotation with parameters / notes
+    if annotation_text:
+        layout_kwargs["height"] = 1100  # extra space for annotation
+        layout_kwargs["margin"] = dict(b=120)
+        layout_kwargs["annotations"] = [
+            dict(
+                text=annotation_text,
+                xref="paper", yref="paper",
+                x=0.0, y=-0.08,
+                showarrow=False,
+                font=dict(size=12, color="gray"),
+                align="left",
+                xanchor="left", yanchor="top",
+            )
+        ]
+
+    fig.update_layout(**layout_kwargs)
 
     # Update y-axis labels
     y_labels = [
@@ -505,7 +288,8 @@ def run_inference(
     continuation: bool,
     continuation_start_fraction: float = 0.5,
     prediction_timing: str = "after",
-    auditory_only: bool = False,
+    auditory_only: bool = True,
+    beat_baseline: float = 0.0,
 ) -> Dict[str, np.ndarray]:
     """
     Run inference on a sequence and collect predictions.
@@ -518,7 +302,8 @@ def run_inference(
         continuation_start_fraction: Fraction of sequence after which continuation starts
         prediction_timing: "before" or "after" inference optimization
         auditory_only: If True, vestibular is NOT given to the inference loop
-
+        beat_baseline: Baseline value for auditory input during continuation
+            (0.0 for standard mode, negative flat value for zero_mean_beat mode)
 
     Returns:
         Dictionary containing:
@@ -542,16 +327,17 @@ def run_inference(
     continuation_start = int(continuation_start_fraction * n_steps)
     use_hierarchy = network.use_hierarchy
 
+    print(f"auditory only = {auditory_only}")
     for step, (vestibular, beat) in enumerate(zip(vestibular_seq, beat_seq)):
         continuation_flag = continuation and (step > continuation_start)
 
-        print(f"auditory only = {auditory_only}")
         result = network.timestep_inference(
             vestibular_input=vestibular,
             beat_input=beat,
             continuation=continuation_flag,
             prediction_timing=prediction_timing,
             auditory_only=auditory_only,
+            beat_baseline=beat_baseline,
         )
 
         vest_pred_list.append(result['vest_pred'].squeeze().tolist())
@@ -619,6 +405,7 @@ def test_sensorimotor_model(
     logger: ExperimentLogger,
     n_beats: Optional[int] = None,
     wait_time: float = 0.0,
+    note: Optional[str] = None,
 ) -> None:
     """
     Test a trained sensorimotor model and generate plots.
@@ -632,6 +419,7 @@ def test_sensorimotor_model(
         logger: ExperimentLogger for logging test results
         n_beats: If set, zero out beat input after this many beats
         wait_time: Seconds of silence to prepend before input starts
+        note: Optional free-text note to display on the plot
     """
     exp_dir = config_path.parent
 
@@ -694,86 +482,122 @@ def test_sensorimotor_model(
 
     dt = config['experiment']['dt']
 
+    # Compute beat baseline for zero-mean mode
+    zero_mean_beat = config['experiment'].get('zero_mean_beat', False)
+    if zero_mean_beat:
+        steps_per_period = round(tempo / dt)
+        beat_baseline = -1.0 / steps_per_period
+    else:
+        beat_baseline = 0.0
+
     # Prepend silent wait time at the beginning
     if wait_time > 0:
         n_wait = int(wait_time / dt)
         wait_pad_v = torch.zeros(n_wait)
-        wait_pad_b = torch.zeros(n_wait)
+        wait_pad_b = torch.full((n_wait,), beat_baseline)
         vestibular_seq = torch.cat([wait_pad_v, vestibular_seq])
         beat_seq = torch.cat([wait_pad_b, beat_seq])
 
-    # Zero out beat input after n_beats
+    # Set beat input to baseline after n_beats
     if n_beats is not None:
         beat_indices = torch.where(beat_seq > 0)[0]
         if len(beat_indices) >= n_beats:
             cutoff = beat_indices[n_beats - 1].item() + 1
-            beat_seq[cutoff:] = 0.0
+            beat_seq[cutoff:] = beat_baseline
 
-    # Run inference
-    inference_results = run_inference(
-        network=network,
-        vestibular_seq=vestibular_seq,
-        beat_seq=beat_seq,
-        continuation=continuation,
-        prediction_timing=prediction_timing,
-        auditory_only=True,
-    )
-
-    # Calculate errors
-    errors = calculate_test_errors(
-        vestibular_seq=vestibular_seq,
-        beat_seq=beat_seq,
-        inference_results=inference_results,
-        use_hierarchy=use_hierarchy
-    )
-
-    # Generate filenames
-    html_filename = generate_plot_filename(
-        model_step=model_step,
-        tempo=tempo,
-        prediction_timing=prediction_timing,
-        continuation=continuation,
-        extension="html"
-    )
-    png_filename = generate_plot_filename(
-        model_step=model_step,
-        tempo=tempo,
-        prediction_timing=prediction_timing,
-        continuation=continuation,
-        extension="png"
-    )
-
-    plot_path_html = plots_dir / html_filename
-    plot_path_png = plots_dir / png_filename
-
-    # If continuation mode, zero out beat input in the continuation phase for plotting
+    # If continuation mode, prepare the beat sequence for plotting
     if continuation:
         continuation_start = int(0.5 * len(beat_seq))
         beat_seq_plot = beat_seq.clone()
-        beat_seq_plot[continuation_start + 1:] = 0.0
+        beat_seq_plot[continuation_start + 1:] = beat_baseline
     else:
         beat_seq_plot = beat_seq
 
-    # Plot and save results
-    plot_inference_sequence_sensorimotor(
-        vestibular_seq=vestibular_seq,
-        beat_seq=beat_seq_plot,
-        vestibular_predicted_seq=inference_results['vest_pred'],
-        beat_predicted_seq=inference_results['beat_pred'],
-        e_v_seq=inference_results['e_v'],
-        e_b_seq=inference_results['e_b'],
-        save_path_html=plot_path_html,
-        save_path_png=plot_path_png,
-    )
+    # Common annotation parts (auditory_only label added per condition)
+    mode = config['experiment']['mode']
+    base_annotation_parts = [
+        f"config: {config_path.name}",
+        f"mode: {mode}",
+        f"model_step: {model_step}",
+        f"tempo: {tempo}",
+        f"prediction_timing: {prediction_timing}",
+        f"continuation: {continuation}",
+    ]
+    if n_beats is not None:
+        base_annotation_parts.append(f"n_beats: {n_beats}")
+    if wait_time > 0:
+        base_annotation_parts.append(f"wait_time: {wait_time}s")
+    if zero_mean_beat:
+        base_annotation_parts.append(f"zero_mean_beat: True (baseline={beat_baseline:.4f})")
+    if note:
+        base_annotation_parts.append(f"note: {note}")
 
-    # Log completion
-    logger.log_testing_complete(
-        vest_error=errors['vest_error'],
-        beat_error=errors['beat_error'],
-        x_error=errors['x_error'],
-        H_error=errors.get('H_error'),
-        plot_path=plot_path_html
-    )
+    # Run inference and plot for both auditory_only conditions
+    for auditory_only in [False, True]:
+        ao_label = "auditory_only" if auditory_only else "sensorimotor"
+        print(f"  Running inference ({ao_label})...")
+
+        inference_results = run_inference(
+            network=network,
+            vestibular_seq=vestibular_seq,
+            beat_seq=beat_seq,
+            continuation=continuation,
+            prediction_timing=prediction_timing,
+            auditory_only=auditory_only,
+            beat_baseline=beat_baseline,
+        )
+
+        errors = calculate_test_errors(
+            vestibular_seq=vestibular_seq,
+            beat_seq=beat_seq,
+            inference_results=inference_results,
+            use_hierarchy=use_hierarchy
+        )
+
+        # Generate filenames
+        html_filename = generate_plot_filename(
+            model_step=model_step, tempo=tempo,
+            prediction_timing=prediction_timing,
+            continuation=continuation,
+            auditory_only=auditory_only,
+            extension="html",
+        )
+        png_filename = generate_plot_filename(
+            model_step=model_step, tempo=tempo,
+            prediction_timing=prediction_timing,
+            continuation=continuation,
+            auditory_only=auditory_only,
+            extension="png",
+        )
+
+        plot_path_html = plots_dir / html_filename
+        plot_path_png = plots_dir / png_filename
+
+        # Build annotation text
+        annotation_parts = base_annotation_parts + [f"auditory_only: {auditory_only}"]
+        annotation_text = "  |  ".join(annotation_parts)
+
+        # Plot and save results
+        plot_inference_sequence_sensorimotor(
+            vestibular_seq=vestibular_seq,
+            beat_seq=beat_seq_plot,
+            vestibular_predicted_seq=inference_results['vest_pred'],
+            beat_predicted_seq=inference_results['beat_pred'],
+            e_v_seq=inference_results['e_v'],
+            e_b_seq=inference_results['e_b'],
+            save_path_html=plot_path_html,
+            save_path_png=plot_path_png,
+            annotation_text=annotation_text,
+        )
+
+        # Log completion
+        logger.log_testing_complete(
+            vest_error=errors['vest_error'],
+            beat_error=errors['beat_error'],
+            x_error=errors['x_error'],
+            H_error=errors.get('H_error'),
+            plot_path=plot_path_html
+        )
 
 
 def test_and_plot() -> None:
@@ -820,6 +644,12 @@ def test_and_plot() -> None:
         type=float,
         default=0.0,
         help='Silent wait time (seconds) at the beginning before input starts'
+    )
+    parser.add_argument(
+        '--note',
+        type=str,
+        default=None,
+        help='Free-text note to display at the bottom of the plot'
     )
     args = parser.parse_args()
 
@@ -870,6 +700,7 @@ def test_and_plot() -> None:
                 logger=logger,
                 n_beats=args.n_beats,
                 wait_time=args.wait_time,
+                note=args.note,
             )
     else:
         raise ValueError(f"Unknown experiment mode: {mode}")
