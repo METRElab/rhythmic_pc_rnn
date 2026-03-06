@@ -1,0 +1,88 @@
+# Configuration for UNCORRELATED control experiment (Poisson variant)
+# This addresses Reviewer 1's concern about whether the network learns
+# cross-modal associations or simply becomes a frequency-matched oscillator.
+#
+# KEY DIFFERENCE from main experiment:
+# - Vestibular input: Regular triangular waveform (same as main experiment)
+# - Auditory input: RANDOM pulses from a Poisson process
+#
+# EXPECTED RESULTS:
+# 1. Network will learn to predict vestibular waveform (error decreases)
+# 2. Auditory prediction error will NOT decrease much (random = unpredictable)
+# 3. After training, auditory-only input will NOT trigger vestibular oscillation
+#    (because auditory channel learned ~zero predictive weights)
+#
+# This demonstrates that CORRELATION between modalities is essential,
+# not just their co-presence during training.
+
+experiment:
+  dt: 0.05
+  duration: 10.0
+  mode: uncorrelated  # Regular vestibular + random auditory
+  n_training_rounds: 6000
+  name: uncorrelated_control_white_noise
+  random_seed: 164
+  zero_mean_beat: true
+
+  tempo:
+    # Vestibular tempo (auditory is random, but we still need this for vestibular)
+    mode: single
+    value: 0.5
+    # Range settings (unused in single mode, kept for reference)
+    min: 0.4
+    max: 0.8
+    step: 0.1
+
+  # Configuration for random auditory pulses
+  random_audio:
+    # Distribution type: 'uniform' or 'poisson' or 'white_noise'
+#    distribution: poisson
+
+    # Poisson process parameters:
+    # rate (λ): Average number of pulses per second (Hz)
+    # The inter-pulse intervals follow an exponential distribution
+    # with mean = 1/rate seconds
+    #
+    # Design rationale:
+    # - rate of 2.0 Hz gives mean IPI of 0.5s, matching vestibular tempo
+    # - This ensures similar average pulse DENSITY to the main experiment
+    # - But the exponential distribution of IPIs ensures NO consistent
+    #   phase relationship with vestibular input
+    # - Poisson process is memoryless: each pulse is independent of history
+#    rate: 2.0  # Pulses per second (Hz), mean IPI = 1/rate = 0.5s
+
+    # Alternative: Uniform distribution (comment out 'distribution' and 'rate' above,
+    # uncomment below to use uniform instead)
+    # distribution: uniform
+    # ipi_min: 0.2  # Minimum time between pulses (seconds)
+    # ipi_max: 0.8  # Maximum time between pulses (seconds)
+
+    # Alternative: white noise distribution
+    # uncomment below to use uniform instead)
+     distribution: white_noise
+     probability: 0.1
+
+logging:
+  level: INFO
+
+network:
+  alpha_H: 0.1
+  alpha_x: 1
+  associative_size: 60
+  higher_size: 0
+  inference_learning_rate_H: 0.049706088801492805
+  inference_learning_rate_x: 0.049706088801492805
+  n_inference_steps: 34
+  vestibular_size: 1
+  weight_learning_rate_H: 0.47037325216247716
+  weight_learning_rate_x: 0.47037325216247716
+
+saving:
+  base_dir: experiments
+  log_every: 10
+
+testing:
+  continuation: false
+  n_inference_rounds: 1
+  prediction_timing: after
+  test_duration: 20.0

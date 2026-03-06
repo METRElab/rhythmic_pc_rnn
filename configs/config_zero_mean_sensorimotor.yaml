@@ -1,0 +1,48 @@
+experiment:
+  dt: 0.05                    # simulation timestep in seconds
+  duration: 10.0              # total duration per training round in seconds
+  mode: "sensorimotor"
+  zero_mean_beat: true        # transform beat to zero-mean: flat=-1/steps_per_period, pulse=(steps_per_period-1)/steps_per_period
+  n_training_rounds: 1000     # number of training rounds
+  name: "zero_mean_sensorimotor_exp"    # experiment name (timestamp will be appended)
+  random_seed: 164            # random seed for weight initialization
+  tempo:
+    mode: "range"             # "single" or "range"
+    value: 0.5                # used when mode is "single"
+    min: 0.45                  # used when mode is "range"
+    max: 0.55                  # used when mode is "range"
+    step: 0.05                 # discrete steps for range mode
+
+network:
+  # Layer sizes
+  higher_size: 1              # m units in H (set to 0 to disable hierarchy)
+  associative_size: 60        # n units in x
+  vestibular_size: 1          # vestibular input dimension
+
+  # Timescales (leaky integration)
+  alpha_H: 0.1                # slow timescale for higher layer
+  alpha_x: 1                # faster timescale for associative layer
+
+  # Inference learning rates (state optimization within timestep)
+  inference_learning_rate_H: 0.049706088801492805
+  inference_learning_rate_x: 0.049706088801492805
+
+  # Weight learning rates (Hebbian updates)
+  weight_learning_rate_H: 0.47037325216247716    # for W_HH, W_Hx
+  weight_learning_rate_x: 0.47037325216247716    # for W_rec, W_v, W_b
+
+  # Inference steps
+  n_inference_steps: 34
+
+saving:
+  base_dir: "experiments"
+  log_every: 10
+
+logging:
+  level: "INFO"
+
+testing:
+  test_duration: 20.0
+  continuation: false
+  prediction_timing: "after"
+  n_inference_rounds: 1
