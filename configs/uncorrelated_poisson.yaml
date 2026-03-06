@@ -19,6 +19,7 @@ experiment:
   dt: 0.05
   duration: 10.0
   mode: uncorrelated  # Regular vestibular + random auditory
+  random_phase: false
   n_training_rounds: 6000
   name: uncorrelated_control_poisson
   random_seed: 164

@@ -3,6 +3,7 @@ experiment:
   duration: 10.0              # total duration per training round in seconds
   mode: "sensorimotor"
   zero_mean_beat: true        # transform beat to zero-mean: flat=-1/steps_per_period, pulse=(steps_per_period-1)/steps_per_period
+  random_phase: false
   n_training_rounds: 1000     # number of training rounds
   name: "zero_mean_sensorimotor_exp"    # experiment name (timestamp will be appended)
   random_seed: 164            # random seed for weight initialization

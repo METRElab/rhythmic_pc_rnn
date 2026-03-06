@@ -2,6 +2,7 @@ experiment:
   dt: 0.05    # simulation timestep
   duration: 10.0  # total duration in seconds
   mode: "doublebeat"    # "sensorimotor" or "beat"
+  random_phase: false
   n_training_rounds: 100
   name: "doublebeat_exp"
   random_seed: 111    # random seed for initializing the weights

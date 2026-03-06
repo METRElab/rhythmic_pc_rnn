@@ -23,6 +23,7 @@ experiment:
   name: uncorrelated_control_white_noise
   random_seed: 164
   zero_mean_beat: true
+  random_phase: ture
 
   tempo:
     # Vestibular tempo (auditory is random, but we still need this for vestibular)
