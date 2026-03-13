@@ -208,7 +208,9 @@ python -m visualization.make_figures \
     --output-dir visualization/paper_output \
     --overlay-lc-data other_experiment/data/learning_curve_sensorimotor.npz \
     --lc-label "Sensorimotor" \
-    --overlay-lc-label "Uncorrelated control"
+    --overlay-lc-label "Uncorrelated control" \
+    --overlay-lc-start-step 5000 \
+    --overlay-lc-end-step 40000
 ```
 
 See `visualization/README.md` for full documentation of the figure pipeline.

@@ -53,9 +53,9 @@ python -m visualization.make_figures \
     --prediction-timing before \
     --moving-average-window 300 \
     --smoothing-window 300 \
-    --lc-end-step 53500 \
+    --lc-end-step 61620 \
     --overlay-lc-data /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/visualization/paper_output_good_old_sensorimotor_random_phase/data/learning_curve_sensorimotor.npz \
-    --lc-start-step 9000
+    --lc-start-step 19000
 
 python -m visualization.make_figures \
     --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/uncorrelated_control_white_noise_20260212_221431/config.yaml \
@@ -233,6 +233,8 @@ CLI entry point. See Quick Start above for usage.
 --overlay-lc-data          Path to a second learning_curve_*.npz to overlay with faded colour
 --lc-label                 Legend label for the main learning curve (omit for no legend)
 --overlay-lc-label         Legend label for the overlay learning curve
+--overlay-lc-start-step    First training step to show for the overlay curve (default: 0)
+--overlay-lc-end-step      Last training step to show for the overlay curve (default: all)
 ```
 
 ## File Structure

@@ -137,6 +137,7 @@ def plot_learning_curve(
         figsize: Figure size
         label: Legend label for the main curve (None = no legend)
         overlay_steps: Training step numbers for a second experiment overlay
+            (already cropped/re-zeroed by the caller)
         overlay_errors: Error values for the overlay curve
         overlay_label: Legend label for the overlay curve (None = no label)
 
@@ -154,12 +155,8 @@ def plot_learning_curve(
 
     fig, ax = plt.subplots(1, 1, figsize=figsize)
 
-    # Overlay (behind main curve, faded)
+    # Overlay (behind main curve, faded + dashed)
     if overlay_steps is not None and overlay_errors is not None:
-        if max_step is not None:
-            o_mask = overlay_steps <= max_step
-            overlay_steps = overlay_steps[o_mask]
-            overlay_errors = overlay_errors[o_mask]
         o_steps, o_smooth = _smooth_curve(
             overlay_steps.copy(), overlay_errors.copy(),
             moving_average_window, smoothing_window,
@@ -805,7 +802,8 @@ def plot_summary(
         figsize: Figure size
         lc_label: Legend label for main learning curve (None = no legend)
         overlay_steps: Training step numbers for overlay experiment
-        overlay_errors: Error values for overlay experiment
+            (already cropped/re-zeroed by the caller)
+        overlay_errors: Error values for the overlay curve
         overlay_label: Legend label for overlay curve (None = no label)
 
     Returns:
@@ -824,7 +822,7 @@ def plot_summary(
         lc_steps.copy(), lc_errors.copy(), moving_average_window, smoothing_window,
     )
 
-    # Overlay (behind main curve, faded)
+    # Overlay (behind main curve, faded + dashed)
     if overlay_steps is not None and overlay_errors is not None:
         o_steps, o_smooth = _smooth_curve(
             overlay_steps.copy(), overlay_errors.copy(),

@@ -89,6 +89,8 @@ def generate_figures(
     overlay_lc_path: Path | None = None,
     lc_label: str | None = None,
     overlay_lc_label: str | None = None,
+    overlay_lc_start_step: int = 0,
+    overlay_lc_end_step: int | None = None,
 ) -> None:
     """
     Load .npz data files and produce all paper figures.
@@ -106,6 +108,8 @@ def generate_figures(
             with faded colour on learning curve plots.
         lc_label: Legend label for the main learning curve. If None, no legend.
         overlay_lc_label: Legend label for the overlay curve. If None, no label.
+        overlay_lc_start_step: First training step to show for the overlay curve.
+        overlay_lc_end_step: Last training step to show for the overlay curve.
     """
     data_dir = Path(data_dir)
     figures_dir = Path(figures_dir)
@@ -126,7 +130,7 @@ def generate_figures(
     total = 9 if has_doublebeat else 7
     step = 0
 
-    # Load overlay learning curve if provided
+    # Load overlay learning curve if provided, with its own start/end cropping
     overlay_steps = None
     overlay_errors = None
     if overlay_lc_path is not None and Path(overlay_lc_path).exists():
@@ -134,7 +138,7 @@ def generate_figures(
         ov_steps = ov_data['beat_error_steps']
         ov_errors = ov_data['beat_error_values'] + ov_data['vest_error_values']
         overlay_steps, overlay_errors = _crop_learning_curve(
-            ov_steps, ov_errors, lc_start_step, lc_end_step,
+            ov_steps, ov_errors, overlay_lc_start_step, overlay_lc_end_step,
         )
         print(f"  Overlay LC loaded from {overlay_lc_path}")
 
@@ -391,6 +395,15 @@ def main():
         '--overlay-lc-label', type=str, default=None,
         help='Legend label for the overlay learning curve.',
     )
+    parser.add_argument(
+        '--overlay-lc-start-step', type=int, default=0,
+        help='First training step to show for the overlay learning curve (default: 0). '
+             'Steps before this are discarded and x-axis is re-zeroed.',
+    )
+    parser.add_argument(
+        '--overlay-lc-end-step', type=int, default=None,
+        help='Last training step to show for the overlay learning curve (default: all)',
+    )
 
     args = parser.parse_args()
     output_dir = Path(args.output_dir)
@@ -410,6 +423,8 @@ def main():
             overlay_lc_path=args.overlay_lc_data,
             lc_label=args.lc_label,
             overlay_lc_label=args.overlay_lc_label,
+            overlay_lc_start_step=args.overlay_lc_start_step,
+            overlay_lc_end_step=args.overlay_lc_end_step,
         )
     else:
         # Full pipeline
@@ -446,6 +461,8 @@ def main():
             overlay_lc_path=args.overlay_lc_data,
             lc_label=args.lc_label,
             overlay_lc_label=args.overlay_lc_label,
+            overlay_lc_start_step=args.overlay_lc_start_step,
+            overlay_lc_end_step=args.overlay_lc_end_step,
         )
 
 
