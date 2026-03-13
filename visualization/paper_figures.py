@@ -111,7 +111,7 @@ def plot_learning_curve(
     smoothing_window: int = 30,
     moving_average_window: int = 1,
     max_step: Optional[int] = None,
-    title: str = 'Learning Curve: Sensory Prediction Error',
+    title: str = 'Sensory Prediction Error',
     figsize: Tuple[float, float] = (13, 6),
     label: Optional[str] = None,
     overlay_steps: Optional[np.ndarray] = None,
