@@ -53,11 +53,42 @@ from visualization.paper_figures import (
 from visualization.style import apply_paper_style
 
 
+def _crop_learning_curve(
+    steps: np.ndarray,
+    errors: np.ndarray,
+    start_step: int = 0,
+    end_step: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Crop learning curve data to [start_step, end_step] and re-zero the x-axis.
+
+    Args:
+        steps: Training step numbers
+        errors: Error values
+        start_step: First step to include (data before is discarded)
+        end_step: Last step to include (None = keep all after start)
+
+    Returns:
+        (cropped_steps, cropped_errors) with steps shifted so start_step → 0
+    """
+    mask = steps >= start_step
+    if end_step is not None:
+        mask &= steps <= end_step
+    steps = steps[mask] - start_step
+    errors = errors[mask]
+    return steps, errors
+
+
 def generate_figures(
     data_dir: Path,
     figures_dir: Path,
     moving_average_window: int = 1,
     smoothing_window: int = 30,
+    lc_start_step: int = 0,
+    lc_end_step: int | None = None,
+    overlay_lc_path: Path | None = None,
+    lc_label: str | None = None,
+    overlay_lc_label: str | None = None,
 ) -> None:
     """
     Load .npz data files and produce all paper figures.
@@ -67,6 +98,14 @@ def generate_figures(
         figures_dir: Directory to save output figures
         moving_average_window: Simple moving average window for learning curves
         smoothing_window: uniform_filter1d window for learning curves
+        lc_start_step: First training step to show in learning curves.
+            Steps before this are discarded and the x-axis is re-zeroed
+            so that this step appears as step 0.
+        lc_end_step: Last training step to show (inclusive). None = show all.
+        overlay_lc_path: Path to a second .npz learning curve file to overlay
+            with faded colour on learning curve plots.
+        lc_label: Legend label for the main learning curve. If None, no legend.
+        overlay_lc_label: Legend label for the overlay curve. If None, no label.
     """
     data_dir = Path(data_dir)
     figures_dir = Path(figures_dir)
@@ -87,6 +126,18 @@ def generate_figures(
     total = 9 if has_doublebeat else 7
     step = 0
 
+    # Load overlay learning curve if provided
+    overlay_steps = None
+    overlay_errors = None
+    if overlay_lc_path is not None and Path(overlay_lc_path).exists():
+        ov_data = load_figure_data(Path(overlay_lc_path))
+        ov_steps = ov_data['beat_error_steps']
+        ov_errors = ov_data['beat_error_values'] + ov_data['vest_error_values']
+        overlay_steps, overlay_errors = _crop_learning_curve(
+            ov_steps, ov_errors, lc_start_step, lc_end_step,
+        )
+        print(f"  Overlay LC loaded from {overlay_lc_path}")
+
     print("=== Generating paper figures ===")
 
     # Figure 1a: Learning curve (sensorimotor)
@@ -97,10 +148,19 @@ def generate_figures(
         # Sum beat + vest errors for total error
         steps = lc_data['beat_error_steps']
         total_errors = lc_data['beat_error_values'] + lc_data['vest_error_values']
+        # total_errors = lc_data['vest_error_values']
+        # total_errors = lc_data['beat_error_values']
+        steps, total_errors = _crop_learning_curve(
+            steps, total_errors, lc_start_step, lc_end_step,
+        )
         fig = plot_learning_curve(
             steps, total_errors,
             smoothing_window=smoothing_window,
             moving_average_window=moving_average_window,
+            label=lc_label,
+            overlay_steps=overlay_steps,
+            overlay_errors=overlay_errors,
+            overlay_label=overlay_lc_label,
         )
         fig.savefig(
             figures_dir / 'figure_1a_learning_curve.png',
@@ -190,11 +250,18 @@ def generate_figures(
         ao_data = load_figure_data(ao_path)
         lc_steps_arr = lc_data['beat_error_steps']
         lc_total_errors = lc_data['beat_error_values'] + lc_data['vest_error_values']
+        lc_steps_arr, lc_total_errors = _crop_learning_curve(
+            lc_steps_arr, lc_total_errors, lc_start_step, lc_end_step,
+        )
         fig = plot_summary(
             lc_steps_arr, lc_total_errors,
             sm_data, ao_data,
             smoothing_window=smoothing_window,
             moving_average_window=moving_average_window,
+            lc_label=lc_label,
+            overlay_steps=overlay_steps,
+            overlay_errors=overlay_errors,
+            overlay_label=overlay_lc_label,
         )
         fig.savefig(
             figures_dir / 'figure_summary.png',
@@ -210,6 +277,9 @@ def generate_figures(
             lc_data = load_figure_data(lc_db_path)
             steps = lc_data['beat_error_steps']
             total_errors = lc_data['beat_error_values'] + lc_data['vest_error_values']
+            steps, total_errors = _crop_learning_curve(
+                steps, total_errors, lc_start_step, lc_end_step,
+            )
             fig = plot_learning_curve(
                 steps, total_errors,
                 smoothing_window=smoothing_window,
@@ -298,6 +368,29 @@ def main():
         '--smoothing-window', type=int, default=30,
         help='uniform_filter1d smoothing window for learning curves (default: 30)',
     )
+    parser.add_argument(
+        '--lc-start-step', type=int, default=0,
+        help='First training step to show in learning curves (default: 0). '
+             'Steps before this are discarded and x-axis is re-zeroed.',
+    )
+    parser.add_argument(
+        '--lc-end-step', type=int, default=None,
+        help='Last training step to show in learning curves (default: all)',
+    )
+    parser.add_argument(
+        '--overlay-lc-data', type=str, default=None,
+        help='Path to a second learning_curve_*.npz file to overlay '
+             'with faded colour on learning curve plots',
+    )
+    parser.add_argument(
+        '--lc-label', type=str, default=None,
+        help='Legend label for the main learning curve. '
+             'If omitted (along with --overlay-lc-label), no legend is shown.',
+    )
+    parser.add_argument(
+        '--overlay-lc-label', type=str, default=None,
+        help='Legend label for the overlay learning curve.',
+    )
 
     args = parser.parse_args()
     output_dir = Path(args.output_dir)
@@ -312,6 +405,11 @@ def main():
             data_dir, output_dir / 'figures',
             moving_average_window=args.moving_average_window,
             smoothing_window=args.smoothing_window,
+            lc_start_step=args.lc_start_step,
+            lc_end_step=args.lc_end_step,
+            overlay_lc_path=args.overlay_lc_data,
+            lc_label=args.lc_label,
+            overlay_lc_label=args.overlay_lc_label,
         )
     else:
         # Full pipeline
@@ -343,6 +441,11 @@ def main():
             output_dir / 'data', output_dir / 'figures',
             moving_average_window=args.moving_average_window,
             smoothing_window=args.smoothing_window,
+            lc_start_step=args.lc_start_step,
+            lc_end_step=args.lc_end_step,
+            overlay_lc_path=args.overlay_lc_data,
+            lc_label=args.lc_label,
+            overlay_lc_label=args.overlay_lc_label,
         )
 
 

@@ -32,6 +32,32 @@ python -m visualization.make_figures \
 ```
 
 python -m visualization.make_figures \
+    --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/good_old_sensorimotor_exp_random_phase_true_20260305_225215/config.yaml \
+    --before-step 0 \
+    --after-step-sensorimotor 48460 \
+    --tempo 0.5 \
+    --output-dir visualization/paper_output_good_old_sensorimotor_random_phase \
+    --prediction-timing before \
+    --moving-average-window 400 \
+    --smoothing-window 400 \
+    --lc-end-step 60000 \
+    --lc-start-step 9000
+
+
+python -m visualization.make_figures \
+    --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/uncorrelated_control_white_noise_phase_random/config.yaml \
+    --before-step 0 \
+    --after-step-sensorimotor 6630 \
+    --tempo 0.5 \
+    --output-dir visualization/paper_output_uncorrelated_white_noise_phase_random \
+    --prediction-timing before \
+    --moving-average-window 300 \
+    --smoothing-window 300 \
+    --lc-end-step 53500 \
+    --overlay-lc-data /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/visualization/paper_output_good_old_sensorimotor_random_phase/data/learning_curve_sensorimotor.npz \
+    --lc-start-step 9000
+
+python -m visualization.make_figures \
     --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/uncorrelated_control_white_noise_20260212_221431/config.yaml \
     --before-step 0 \
     --after-step-sensorimotor 9240 \
@@ -75,6 +101,7 @@ visualization/paper_output/
         figure_3_continuation.png
         figure_3b_continuation_auditory_only.png
         figure_combined.png
+        figure_summary.png
         # If --doublebeat-config provided:
         figure_4a_learning_curve_doublebeat.png
         figure_4_double_auditory.png
@@ -158,11 +185,12 @@ Plotting functions. Each takes numpy arrays and returns a `matplotlib.Figure`.
 
 | Function | Figures | Layout |
 |---|---|---|
-| `plot_learning_curve(steps, errors, ...)` | 1a, 4a | Single axes, log-scale y |
+| `plot_learning_curve(steps, errors, ...)` | 1a, 4a | Single axes, log-scale y. Supports overlay + legend control |
 | `plot_before_after_2x2(data, ...)` | 1b, 2 | 2x2 (vest/aud x before/after) |
-| `plot_continuation(data, ...)` | 3 | 2x1 (auditory input + vest prediction) |
+| `plot_continuation(data, ...)` | 3 | 3x1 (auditory input + vest pred + aud pred) |
 | `plot_double_auditory_1x2(data, ...)` | 4 | 1x2 (before/after, beat only) |
 | `plot_combined_multi_panel(data_sm, data_ao, ...)` | Combined | 2x3 (sensorimotor + auditory-only) |
+| `plot_summary(lc_steps, lc_errors, data_sm, data_ao, ...)` | Summary | GridSpec: learning curve + 2x2 after-training. Supports overlay + legend control |
 
 `plot_before_after_2x2` handles both Figure 1b and Figure 2 via parameters:
 
@@ -199,6 +227,12 @@ CLI entry point. See Quick Start above for usage.
 --after-step-doublebeat    Final model step for doublebeat (required if --doublebeat-config given)
 --moving-average-window    Simple moving average window for learning curves (default: 1, no averaging)
 --smoothing-window         uniform_filter1d smoothing window for learning curves (default: 30)
+--lc-start-step            First training step to show in learning curves (default: 0).
+                           Steps before this are discarded and x-axis is re-zeroed.
+--lc-end-step              Last training step to show in learning curves (default: all)
+--overlay-lc-data          Path to a second learning_curve_*.npz to overlay with faded colour
+--lc-label                 Legend label for the main learning curve (omit for no legend)
+--overlay-lc-label         Legend label for the overlay learning curve
 ```
 
 ## File Structure

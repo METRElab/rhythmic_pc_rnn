@@ -86,14 +86,37 @@ def _slice_to_cycles(
 # Figure 1a / 4a: Learning curve
 # ---------------------------------------------------------------------------
 
+def _smooth_curve(
+    steps: np.ndarray,
+    errors: np.ndarray,
+    moving_average_window: int = 1,
+    smoothing_window: int = 1,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Apply moving average then uniform_filter1d, returning (steps, smoothed)."""
+    if moving_average_window > 1:
+        n = len(errors)
+        w = moving_average_window
+        errors = np.array([errors[i:i + w].mean() for i in range(n - w + 1)])
+        steps = steps[:len(errors)]
+
+    if smoothing_window > 1:
+        errors = uniform_filter1d(errors, size=smoothing_window, mode='nearest')
+
+    return steps, errors
+
+
 def plot_learning_curve(
     steps: np.ndarray,
     errors: np.ndarray,
     smoothing_window: int = 30,
     moving_average_window: int = 1,
     max_step: Optional[int] = None,
-    title: str = 'Learning Curve: Total Prediction Error Decrease',
+    title: str = 'Learning Curve: Sensory Prediction Error',
     figsize: Tuple[float, float] = (13, 6),
+    label: Optional[str] = None,
+    overlay_steps: Optional[np.ndarray] = None,
+    overlay_errors: Optional[np.ndarray] = None,
+    overlay_label: Optional[str] = None,
 ) -> plt.Figure:
     """
     Plot a learning curve with log-scale y-axis and optional smoothing.
@@ -112,6 +135,10 @@ def plot_learning_curve(
         max_step: If set, truncate to show only up to this step index
         title: Plot title
         figsize: Figure size
+        label: Legend label for the main curve (None = no legend)
+        overlay_steps: Training step numbers for a second experiment overlay
+        overlay_errors: Error values for the overlay curve
+        overlay_label: Legend label for the overlay curve (None = no label)
 
     Returns:
         matplotlib Figure
@@ -121,29 +148,36 @@ def plot_learning_curve(
         steps = steps[mask]
         errors = errors[mask]
 
-    # Apply moving average first (reduces array length)
-    if moving_average_window > 1:
-        n = len(errors)
-        w = moving_average_window
-        errors = np.array([
-            errors[i:i + w].mean() for i in range(n - w + 1)
-        ])
-        steps = steps[:len(errors)]
-
-    if smoothing_window > 1:
-        errors_smooth = uniform_filter1d(errors, size=smoothing_window, mode='nearest')
-    else:
-        errors_smooth = errors
+    steps, errors_smooth = _smooth_curve(
+        steps.copy(), errors.copy(), moving_average_window, smoothing_window,
+    )
 
     fig, ax = plt.subplots(1, 1, figsize=figsize)
 
-    ax.plot(steps, errors_smooth, '-', linewidth=1.5, alpha=0.9)
+    # Overlay (behind main curve, faded)
+    if overlay_steps is not None and overlay_errors is not None:
+        if max_step is not None:
+            o_mask = overlay_steps <= max_step
+            overlay_steps = overlay_steps[o_mask]
+            overlay_errors = overlay_errors[o_mask]
+        o_steps, o_smooth = _smooth_curve(
+            overlay_steps.copy(), overlay_errors.copy(),
+            moving_average_window, smoothing_window,
+        )
+        ax.plot(o_steps, o_smooth, '--', linewidth=1.5, alpha=0.3,
+                color='tab:blue', label=overlay_label)
+
+    ax.plot(steps, errors_smooth, '-', linewidth=1.5, alpha=0.9, label=label)
     ax.set_xlabel('Training Step')
-    ax.set_ylabel('Total Prediction Error')
+    ax.set_ylabel('Sensory Prediction Error')
     ax.set_title(title)
     ax.grid(True, alpha=STYLES['grid_alpha'], linestyle='-', linewidth=0.5)
     ax.set_yscale('log')
     remove_chart_junk(ax)
+
+    # Only show legend when at least one label is provided
+    if label is not None or overlay_label is not None:
+        ax.legend(loc='upper right')
 
     plt.tight_layout()
     return fig
@@ -742,6 +776,10 @@ def plot_summary(
     smoothing_window: int = 30,
     moving_average_window: int = 1,
     figsize: Tuple[float, float] = (14, 14),
+    lc_label: Optional[str] = None,
+    overlay_steps: Optional[np.ndarray] = None,
+    overlay_errors: Optional[np.ndarray] = None,
+    overlay_label: Optional[str] = None,
 ) -> plt.Figure:
     """
     Summary figure combining the learning curve with after-training panels.
@@ -765,6 +803,10 @@ def plot_summary(
         smoothing_window: uniform_filter1d window for learning curve
         moving_average_window: Simple moving average window for learning curve
         figsize: Figure size
+        lc_label: Legend label for main learning curve (None = no legend)
+        overlay_steps: Training step numbers for overlay experiment
+        overlay_errors: Error values for overlay experiment
+        overlay_label: Legend label for overlay curve (None = no label)
 
     Returns:
         matplotlib Figure
@@ -778,27 +820,31 @@ def plot_summary(
     # --- Top row: Learning curve (spans both columns) ---
     ax_lc = fig.add_subplot(gs[0, :])
 
-    lc_steps_plot = lc_steps.copy()
-    lc_errors_plot = lc_errors.copy()
+    lc_steps_plot, lc_errors_plot = _smooth_curve(
+        lc_steps.copy(), lc_errors.copy(), moving_average_window, smoothing_window,
+    )
 
-    if moving_average_window > 1:
-        n = len(lc_errors_plot)
-        w = moving_average_window
-        lc_errors_plot = np.array([
-            lc_errors_plot[i:i + w].mean() for i in range(n - w + 1)
-        ])
-        lc_steps_plot = lc_steps_plot[:len(lc_errors_plot)]
+    # Overlay (behind main curve, faded)
+    if overlay_steps is not None and overlay_errors is not None:
+        o_steps, o_smooth = _smooth_curve(
+            overlay_steps.copy(), overlay_errors.copy(),
+            moving_average_window, smoothing_window,
+        )
+        ax_lc.plot(o_steps, o_smooth, '--', linewidth=1.5, alpha=0.3,
+                   color='tab:blue', label=overlay_label)
 
-    if smoothing_window > 1:
-        lc_errors_plot = uniform_filter1d(lc_errors_plot, size=smoothing_window, mode='nearest')
-
-    ax_lc.plot(lc_steps_plot, lc_errors_plot, '-', linewidth=1.5, alpha=0.9)
+    ax_lc.plot(lc_steps_plot, lc_errors_plot, '-', linewidth=1.5, alpha=0.9,
+               label=lc_label)
     ax_lc.set_xlabel('Training Step')
-    ax_lc.set_ylabel('Total Prediction Error')
+    ax_lc.set_ylabel('Sensory Prediction Error')
     ax_lc.set_title('Learning Curve')
     ax_lc.grid(True, alpha=STYLES['grid_alpha'], linestyle='-', linewidth=0.5)
     ax_lc.set_yscale('log')
     remove_chart_junk(ax_lc)
+
+    # Only show legend when at least one label is provided
+    if lc_label is not None or overlay_label is not None:
+        ax_lc.legend(loc='upper right')
 
     # --- Process sensorimotor data (column 1) ---
     _, cycle_length_sm = _detect_cycles(data_sensorimotor['beat_seq_after'])

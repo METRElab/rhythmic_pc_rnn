@@ -35,21 +35,25 @@ pip install numpy torch pyyaml tensorboard plotly optuna kaleido scipy matplotli
 │   ├── config_sensorimotor_doublebeat.yaml # Auditory on both channels (hierarchical)
 │   ├── config_beat.yaml                   # Auditory only (no vestibular)
 │   ├── config_doublebeat.yaml             # Auditory on both channels
+│   ├── config_zero_mean_sensorimotor.yaml # Sensorimotor with zero-mean beat
 │   ├── uncorrelated.yaml                  # Vestibular + random auditory (uniform)
-│   └── uncorrelated_poisson.yaml          # Vestibular + random auditory (Poisson)
-├── network.py         # Hierarchical predictive coding RNN (SensorimotorPCRNN)
-├── train.py           # Training script
-├── test_and_plot.py   # Testing & interactive Plotly visualization
-├── utils.py           # Input generation & experiment management
-├── logger.py          # Logging utility
-├── optuna_tune.py     # Hyperparameter tuning
-├── visualization/     # Publication-ready paper figure pipeline
+│   ├── uncorrelated_poisson.yaml          # Vestibular + random auditory (Poisson)
+│   └── uncorrelated_white_noise.yaml      # Vestibular + random auditory (white noise)
+├── network.py           # Hierarchical predictive coding RNN (SensorimotorPCRNN)
+├── train.py             # Training script
+├── test_and_plot.py     # Testing & interactive Plotly visualization
+├── utils.py             # Input generation & experiment management
+├── logger.py            # Logging utility
+├── optuna_tune.py       # Hyperparameter tuning
+├── plot_inputs.py       # Standalone input sequence visualization
+├── plot_training_log.py # Plot training errors from training.log (Plotly HTML)
+├── visualization/       # Publication-ready paper figure pipeline
 │   ├── style.py                 # Shared matplotlib config
 │   ├── generate_figure_data.py  # Model checkpoints -> .npz data
 │   ├── paper_figures.py         # .npz data -> matplotlib figures
 │   ├── make_figures.py          # CLI orchestrator
 │   └── paper_visualization.py   # Pedagogical/schematic diagrams
-└── experiments/       # Output directory (created at runtime)
+└── experiments/         # Output directory (created at runtime)
     ├── sensorimotor/
     ├── doublebeat/
     ├── beat/
@@ -63,11 +67,14 @@ Key config options in `config_sensorimotor.yaml`:
 ```yaml
 experiment:
   tempo:
-    mode: "range"    # "single" or "range"
-    value: 0.5       # used when mode is "single"
-    min: 0.4         # used when mode is "range"
+    mode: "range"         # "single" or "range"
+    value: 0.5            # used when mode is "single"
+    min: 0.4              # used when mode is "range"
     max: 0.8
-    step: 0.1        # creates [0.4, 0.5, 0.6, 0.7, 0.8]
+    step: 0.1             # creates [0.4, 0.5, 0.6, 0.7, 0.8]
+  zero_mean_beat: false   # transform beat pulses to be zero-mean per period
+  random_phase: false     # start each sequence at a random phase in the cycle
+  random_seed: 111        # seed for reproducibility (used by rng throughout)
 ```
 
 ## Usage
@@ -115,6 +122,13 @@ Add silent wait time before the input begins:
 ```bash
 python test_and_plot.py --config experiments/sensorimotor/{exp_name}/config.yaml --model_step 5000 --wait_time 0.5
 ```
+
+Add a free-text note displayed at the bottom of the plot:
+```bash
+python test_and_plot.py --config experiments/sensorimotor/{exp_name}/config.yaml --model_step 5000 --note "experiment with random phase"
+```
+
+Both `auditory_only=True` and `auditory_only=False` conditions are tested and saved automatically as separate plots with compact filenames (e.g. `s5000_t0.5_after.html`, `s5000_t0.5_after_ao.html`).
 
 Output: `experiments/sensorimotor/{exp_name}/inference_plots/`
 - HTML interactive plots
@@ -172,7 +186,7 @@ python -m visualization.make_figures \
     --output-dir visualization/paper_output
 ```
 
-Control learning curve smoothing:
+Control learning curve smoothing and step range:
 
 ```bash
 python -m visualization.make_figures \
@@ -180,10 +194,42 @@ python -m visualization.make_figures \
     --figures-only \
     --output-dir visualization/paper_output \
     --moving-average-window 10 \
-    --smoothing-window 50
+    --smoothing-window 50 \
+    --lc-start-step 1000 \
+    --lc-end-step 50000
+```
+
+Overlay another experiment's learning curve for comparison:
+
+```bash
+python -m visualization.make_figures \
+    --data-dir visualization/paper_output/data \
+    --figures-only \
+    --output-dir visualization/paper_output \
+    --overlay-lc-data other_experiment/data/learning_curve_sensorimotor.npz \
+    --lc-label "Sensorimotor" \
+    --overlay-lc-label "Uncorrelated control"
 ```
 
 See `visualization/README.md` for full documentation of the figure pipeline.
+
+### Training Log Visualization
+
+Plot all training errors from a `training.log` file as an interactive Plotly HTML:
+
+```bash
+python plot_training_log.py experiments/sensorimotor/{exp_name}/training.log
+```
+
+With step range and smoothing:
+
+```bash
+python plot_training_log.py experiments/sensorimotor/{exp_name}/training.log \
+    --start-step 1000 --end-step 50000 \
+    --moving-average-window 50 --smoothing-window 30
+```
+
+Output: `training_errors.html` next to the log file (or specify `-o path.html`).
 
 ## Experiment Modes
 
@@ -193,3 +239,4 @@ See `visualization/README.md` for full documentation of the figure pipeline.
 - `uncorrelated`: Vestibular triangular wave + random uncorrelated auditory pulses
   - `uniform` distribution: inter-pulse intervals drawn from `[ipi_min, ipi_max]`
   - `poisson` distribution: inter-pulse intervals from exponential distribution with rate
+  - `white_noise` distribution: each timestep independently has probability `p` of being a pulse
