@@ -45,7 +45,7 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
 
     # Define the hyperparameters to tune
     # todo
-    # config['experiment']['random_seed'] = trial.suggest_int('random_seed', 1, 1000)
+    config['experiment']['random_seed'] = trial.suggest_int('random_seed', 1, 1000)
 
     # Layer sizes
     # todo
@@ -82,7 +82,7 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     config['network']['n_inference_steps'] = trial.suggest_int('n_inference_steps', 5, 50, step=5)
 
     # Reduce the number of training rounds for faster tuning
-    config['experiment']['n_training_rounds'] = 100
+    config['experiment']['n_training_rounds'] = 200
 
     # Create a temporary experiment name for this trial
     config['experiment']['name'] = f"optuna_trial_{trial.number}"
@@ -93,6 +93,9 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
     np.random.seed(seed)
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
+
+    # Use a specific inference rng so we don't advance the training rng while doing inference
+    inference_rng = np.random.default_rng(seed)
 
     net_config = config['network']
 
@@ -157,11 +160,10 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
             # Accumulate errors
             accumulated_vest_error += ((vestibular - result['vest_pred'].squeeze()) ** 2).sum().item()
             accumulated_beat_error += ((beat - result['beat_pred'].squeeze()) ** 2).sum().item()
-            steps_since_last_log += 1
 
             # Report intermediate values for pruning
-            if global_step % 1000 == 0 and steps_since_last_log > 0:
-                inference_errors = calc_inference_error_sensorimotor(network, config)
+            if global_step % 2000 == 0 and steps_since_last_log > 0:
+                inference_errors = calc_inference_error_sensorimotor(network, config, inference_rng)
                 current_inference_error = inference_errors['vest_inference_error']
 
                 if current_inference_error < min_inference_error:
@@ -178,6 +180,8 @@ def objective(trial: optuna.Trial, base_config: Dict[str, Any]) -> float:
                 # Enable early stopping if the trial is not promising
                 if trial.should_prune():
                     raise optuna.exceptions.TrialPruned()
+
+            steps_since_last_log += 1
 
     return min_inference_error
 

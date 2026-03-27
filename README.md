@@ -233,6 +233,27 @@ python plot_training_log.py experiments/sensorimotor/{exp_name}/training.log \
 
 Output: `training_errors.html` next to the log file (or specify `-o path.html`).
 
+### Interactive Step Viewer
+
+Compare model predictions across all saved checkpoints with an interactive slider.
+Both sensorimotor and auditory-only conditions are generated automatically:
+
+```bash
+python interactive_step_viewer.py \
+    --config experiments/sensorimotor/{exp_name}/config.yaml \
+    --tempo 0.5
+
+# Restrict to a range of steps
+python interactive_step_viewer.py \
+    --config experiments/sensorimotor/{exp_name}/config.yaml \
+    --tempo 0.5 \
+    --min-step 100 --max-step 5000
+```
+
+Output in `<exp_dir>/inference_plots/`:
+- `step_viewer_sm.html` — sensorimotor condition
+- `step_viewer_ao.html` — auditory-only condition
+
 ## Experiment Modes
 
 - `sensorimotor`: Vestibular triangular wave + correlated auditory pulses (default)

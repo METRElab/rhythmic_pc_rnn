@@ -20,9 +20,9 @@ experiment:
   duration: 10.0
   mode: uncorrelated  # Regular vestibular + random auditory
   n_training_rounds: 6000
-  name: uncorrelated_control_white_noise
+  name: uncorrelated_control_white_noise_random_vest_input_objective
   random_seed: 164
-  zero_mean_beat: true
+  zero_mean_beat: false
   random_phase: true
 
   tempo:

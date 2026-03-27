@@ -238,6 +238,7 @@ def generate_input_sequences(
     if random_phase:
         phase_rng = rng if rng is not None else np.random.default_rng()
         phi = float(phase_rng.uniform(0, tempo))
+        # print(f"Random phase: {phi}")
     else:
         phi = 0.0
 

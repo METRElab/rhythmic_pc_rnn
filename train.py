@@ -24,6 +24,7 @@ from utils import (
 def calc_inference_error_sensorimotor(
     network: SensorimotorPCRNN,
     config: Dict[str, Any],
+    rng: np.random.Generator,
 ) -> Dict[str, float]:
     """
     Calculate inference error over multiple test rounds.
@@ -52,8 +53,8 @@ def calc_inference_error_sensorimotor(
     use_hierarchy = network.use_hierarchy
 
     # Use a separate rng for evaluation so it doesn't perturb training rng
-    eval_seed = config['experiment'].get('random_seed', 42)
-    eval_rng = np.random.default_rng(eval_seed)
+    # eval_seed = config['experiment'].get('random_seed', 42)
+    # eval_rng = np.random.default_rng(eval_seed)
 
     tempos = get_tempo_values(config)
     for tempo in tempos:
@@ -64,14 +65,16 @@ def calc_inference_error_sensorimotor(
             test_vestibular_seq, test_beat_seq = generate_input_sequences(
                 tempo=tempo,
                 config=config,
-                rng=eval_rng,
+                rng=rng,
             )
 
             # Run inference for each timestep
             for vestibular, beat in zip(test_vestibular_seq, test_beat_seq):
                 result = network.timestep_inference(
                     vestibular_input=vestibular,
-                    beat_input=beat
+                    beat_input=beat,
+                    auditory_only=False,
+                    prediction_timing="before",
                 )
 
                 # Accumulate errors
@@ -141,14 +144,18 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
 
     # Calculate steps per round (using first tempo for reference)
     # Use a throwaway rng so we don't advance the training rng
-    reference_tempo = tempo_values[0]
-    ref_rng = np.random.default_rng(seed)
-    _, reference_beat_seq = generate_input_sequences(
-        tempo=reference_tempo,
-        config=config,
-        rng=ref_rng,
-    )
-    n_steps_per_round = len(reference_beat_seq)
+    # reference_tempo = tempo_values[0]
+    # ref_rng = np.random.default_rng(seed)
+    # _, reference_beat_seq = generate_input_sequences(
+    #     tempo=reference_tempo,
+    #     config=config,
+    #     rng=ref_rng,
+    # )
+    # n_steps_per_round = len(reference_beat_seq)
+    n_steps_per_round = int(config["experiment"]["duration"] / config["experiment"]["dt"])
+
+    # Use a specific inference rng so we don't advance the training rng while doing inference
+    inference_rng = np.random.default_rng(seed)
 
     # Initialize error accumulators
     accumulated_vest_error = 0.0
@@ -202,8 +209,6 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
                 x_err = (network.x - predictions['mu_x']).pow(2).sum().item()
                 accumulated_x_error += x_err
 
-            steps_since_last_log += 1
-
             # Log metrics periodically
             # if global_step % config['saving']['log_every'] == 0:
             if global_step % config['saving']['log_every'] == 0 and steps_since_last_log > 0:
@@ -213,7 +218,7 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
                 avg_x_error = accumulated_x_error / steps_since_last_log
 
                 # Calculate inference errors
-                inference_errors = calc_inference_error_sensorimotor(network, config)
+                inference_errors = calc_inference_error_sensorimotor(network, config, inference_rng)
 
                 # Build metrics dict
                 metrics = {
@@ -245,6 +250,8 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
                 if avg_vest_inference_error < min_avg_vest_inference_error:
                     min_avg_vest_inference_error = avg_vest_inference_error
                     exp_manager.save_model(network, global_step)
+
+            steps_since_last_log += 1
 
     # Finish experiment
     exp_manager.finish()
