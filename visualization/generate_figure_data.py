@@ -316,6 +316,120 @@ def _extract_learning_curve_data(exp_dir: Path) -> Dict[str, np.ndarray]:
     }
 
 
+def generate_ao_comparison_data(
+    config_path: Path,
+    ao_step_1: int,
+    ao_step_2: int,
+    tempo: float,
+    prediction_timing: str = "after",
+) -> Dict[str, np.ndarray]:
+    """
+    Generate auditory-only comparison data at two model steps.
+
+    Produces data for a 2x3 figure:
+        Col 1: Training input (raw sequences from original config mode)
+        Col 2: Auditory-only predictions at ao_step_1
+        Col 3: Auditory-only predictions at ao_step_2
+
+    For uncorrelated experiments the left panel uses the original random
+    auditory input while the two AO panels use aligned (sensorimotor)
+    inputs so the prediction quality is visible.
+
+    Args:
+        config_path: Path to experiment config.yaml
+        ao_step_1: Model step for middle panel
+        ao_step_2: Model step for right panel
+        tempo: Tempo in seconds
+        prediction_timing: "before" or "after" inference optimization
+
+    Returns:
+        Dict with keys: vest_seq_input, beat_seq_input,
+        vest_seq_aligned, beat_seq_aligned,
+        vest_pred_step1, beat_pred_step1,
+        vest_pred_step2, beat_pred_step2,
+        ao_step_1, ao_step_2
+    """
+    config_path = Path(config_path)
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    seed = config['experiment'].get('random_seed', 42)
+    mode = config['experiment']['mode']
+    dt = config['experiment']['dt']
+
+    # --- Left panel: original input (may be uncorrelated / random) ---
+    input_rng = np.random.default_rng(seed)
+    result_input = generate_input_sequences(config=config, tempo=tempo, rng=input_rng)
+    if mode == 'beat':
+        beat_seq_input = result_input
+        vest_seq_input = torch.zeros_like(beat_seq_input)
+    else:
+        vest_seq_input, beat_seq_input = result_input
+
+    # --- Middle / right panels: aligned (sensorimotor) input ---
+    if mode == 'uncorrelated':
+        aligned_config = {
+            **config,
+            'experiment': {**config['experiment'], 'mode': 'sensorimotor'},
+        }
+    else:
+        aligned_config = config
+
+    aligned_rng = np.random.default_rng(seed)
+    result_aligned = generate_input_sequences(
+        config=aligned_config, tempo=tempo, rng=aligned_rng,
+    )
+    if aligned_config['experiment']['mode'] == 'beat':
+        beat_seq_aligned = result_aligned
+        vest_seq_aligned = torch.zeros_like(beat_seq_aligned)
+    else:
+        vest_seq_aligned, beat_seq_aligned = result_aligned
+
+    # Beat baseline for zero-mean mode
+    zero_mean_beat = config['experiment'].get('zero_mean_beat', False)
+    if zero_mean_beat:
+        steps_per_period = round(tempo / dt)
+        beat_baseline = -1.0 / steps_per_period
+    else:
+        beat_baseline = 0.0
+
+    # --- Run auditory-only inference at both steps using aligned inputs ---
+    network_1, _ = load_model(config_path, ao_step_1)
+    res_1 = run_inference(
+        network=network_1,
+        vestibular_seq=vest_seq_aligned,
+        beat_seq=beat_seq_aligned,
+        continuation=False,
+        prediction_timing=prediction_timing,
+        auditory_only=True,
+        beat_baseline=beat_baseline,
+    )
+
+    network_2, _ = load_model(config_path, ao_step_2)
+    res_2 = run_inference(
+        network=network_2,
+        vestibular_seq=vest_seq_aligned,
+        beat_seq=beat_seq_aligned,
+        continuation=False,
+        prediction_timing=prediction_timing,
+        auditory_only=True,
+        beat_baseline=beat_baseline,
+    )
+
+    return {
+        'vest_seq_input': vest_seq_input.cpu().numpy(),
+        'beat_seq_input': beat_seq_input.cpu().numpy(),
+        'vest_seq_aligned': vest_seq_aligned.cpu().numpy(),
+        'beat_seq_aligned': beat_seq_aligned.cpu().numpy(),
+        'vest_pred_step1': res_1['vest_pred'],
+        'beat_pred_step1': res_1['beat_pred'],
+        'vest_pred_step2': res_2['vest_pred'],
+        'beat_pred_step2': res_2['beat_pred'],
+        'ao_step_1': np.array(ao_step_1),
+        'ao_step_2': np.array(ao_step_2),
+    }
+
+
 def generate_all_figure_data(
     sensorimotor_config: Path,
     before_step: int,

@@ -40,9 +40,12 @@ if str(_project_root) not in sys.path:
 
 from visualization.generate_figure_data import (
     generate_all_figure_data,
+    generate_ao_comparison_data,
     load_figure_data,
+    save_figure_data,
 )
 from visualization.paper_figures import (
+    plot_ao_comparison,
     plot_before_after_2x2,
     plot_combined_multi_panel,
     plot_continuation,
@@ -91,6 +94,8 @@ def generate_figures(
     overlay_lc_label: str | None = None,
     overlay_lc_start_step: int = 0,
     overlay_lc_end_step: int | None = None,
+    ao_start_cycle: int = 0,
+    ao_end_cycle: int = 6,
 ) -> None:
     """
     Load .npz data files and produce all paper figures.
@@ -126,8 +131,10 @@ def generate_figures(
     lc_db_path = data_dir / 'learning_curve_doublebeat.npz'
     db_path = data_dir / 'double_auditory_before_after.npz'
 
+    ao_cmp_path = data_dir / 'ao_comparison.npz'
     has_doublebeat = lc_db_path.exists() or db_path.exists()
-    total = 9 if has_doublebeat else 7
+    has_ao_cmp = ao_cmp_path.exists()
+    total = 7 + (2 if has_doublebeat else 0) + (1 if has_ao_cmp else 0)
     step = 0
 
     # Load overlay learning curve if provided, with its own start/end cropping
@@ -273,6 +280,22 @@ def generate_figures(
         )
         print(f"  Saved to {figures_dir / 'figure_summary.png'}")
 
+    # AO comparison figure (if data exists)
+    if has_ao_cmp:
+        step += 1
+        print(f"[{step}/{total}] AO comparison figure")
+        ao_cmp_data = load_figure_data(ao_cmp_path)
+        fig = plot_ao_comparison(
+            ao_cmp_data,
+            start_cycle=ao_start_cycle,
+            end_cycle=ao_end_cycle,
+        )
+        fig.savefig(
+            figures_dir / 'figure_ao_comparison.png',
+            dpi=300, bbox_inches='tight', facecolor='white',
+        )
+        print(f"  Saved to {figures_dir / 'figure_ao_comparison.png'}")
+
     # Doublebeat figures (only if data exists)
     if has_doublebeat:
         step += 1
@@ -404,9 +427,40 @@ def main():
         '--overlay-lc-end-step', type=int, default=None,
         help='Last training step to show for the overlay learning curve (default: all)',
     )
+    parser.add_argument(
+        '--ao-step-1', type=int, default=None,
+        help='Model step for middle panel of AO comparison figure',
+    )
+    parser.add_argument(
+        '--ao-step-2', type=int, default=None,
+        help='Model step for right panel of AO comparison figure',
+    )
+    parser.add_argument(
+        '--ao-start-cycle', type=int, default=0,
+        help='Starting cycle for AO comparison figure (default: 0)',
+    )
+    parser.add_argument(
+        '--ao-end-cycle', type=int, default=6,
+        help='Ending cycle for AO comparison figure (default: 6)',
+    )
 
     args = parser.parse_args()
     output_dir = Path(args.output_dir)
+
+    # Common kwargs for generate_figures
+    fig_kwargs = dict(
+        moving_average_window=args.moving_average_window,
+        smoothing_window=args.smoothing_window,
+        lc_start_step=args.lc_start_step,
+        lc_end_step=args.lc_end_step,
+        overlay_lc_path=args.overlay_lc_data,
+        lc_label=args.lc_label,
+        overlay_lc_label=args.overlay_lc_label,
+        overlay_lc_start_step=args.overlay_lc_start_step,
+        overlay_lc_end_step=args.overlay_lc_end_step,
+        ao_start_cycle=args.ao_start_cycle,
+        ao_end_cycle=args.ao_end_cycle,
+    )
 
     if args.figures_only:
         # Use provided data-dir or default to output_dir/data
@@ -414,18 +468,7 @@ def main():
         if not data_dir.exists():
             print(f"Error: Data directory not found: {data_dir}")
             sys.exit(1)
-        generate_figures(
-            data_dir, output_dir / 'figures',
-            moving_average_window=args.moving_average_window,
-            smoothing_window=args.smoothing_window,
-            lc_start_step=args.lc_start_step,
-            lc_end_step=args.lc_end_step,
-            overlay_lc_path=args.overlay_lc_data,
-            lc_label=args.lc_label,
-            overlay_lc_label=args.overlay_lc_label,
-            overlay_lc_start_step=args.overlay_lc_start_step,
-            overlay_lc_end_step=args.overlay_lc_end_step,
-        )
+        generate_figures(data_dir, output_dir / 'figures', **fig_kwargs)
     else:
         # Full pipeline
         if not args.sensorimotor_config:
@@ -452,18 +495,20 @@ def main():
             prediction_timing=args.prediction_timing,
         )
 
-        generate_figures(
-            output_dir / 'data', output_dir / 'figures',
-            moving_average_window=args.moving_average_window,
-            smoothing_window=args.smoothing_window,
-            lc_start_step=args.lc_start_step,
-            lc_end_step=args.lc_end_step,
-            overlay_lc_path=args.overlay_lc_data,
-            lc_label=args.lc_label,
-            overlay_lc_label=args.overlay_lc_label,
-            overlay_lc_start_step=args.overlay_lc_start_step,
-            overlay_lc_end_step=args.overlay_lc_end_step,
-        )
+        # AO comparison: generate data if both steps are specified
+        if args.ao_step_1 is not None and args.ao_step_2 is not None:
+            print("\n=== Generating AO comparison data ===")
+            ao_data = generate_ao_comparison_data(
+                config_path=Path(args.sensorimotor_config),
+                ao_step_1=args.ao_step_1,
+                ao_step_2=args.ao_step_2,
+                tempo=args.tempo,
+                prediction_timing=args.prediction_timing,
+            )
+            save_figure_data(ao_data, output_dir / 'data' / 'ao_comparison.npz')
+            print(f"  Saved to {output_dir / 'data' / 'ao_comparison.npz'}")
+
+        generate_figures(output_dir / 'data', output_dir / 'figures', **fig_kwargs)
 
 
 if __name__ == '__main__':

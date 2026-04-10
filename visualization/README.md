@@ -43,6 +43,51 @@ python -m visualization.make_figures \
     --lc-end-step 60000 \
     --lc-start-step 9000
 
+python -m visualization.make_figures \
+    --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/final_ones/doublebeat_mean_vestibular_included/config.yaml \
+    --before-step 2000 \
+    --after-step-sensorimotor 10000 \
+    --tempo 0.5 \
+    --output-dir experiments/paper_revision/final_ones/doublebeat_mean_vestibular_included_paper_figures \
+    --prediction-timing before \
+    --moving-average-window 0 \
+    --smoothing-window 0 \
+     --lc-end-step 10000 \
+    --ao-step-1 10000 --ao-step-2 100000 \
+
+python -m visualization.make_figures \
+    --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/final_ones/sensorimotor_mean_vestibular_included/config.yaml \
+    --before-step 2000 \
+    --after-step-sensorimotor 10000 \
+    --tempo 0.5 \
+    --output-dir experiments/paper_revision/final_ones/sensorimotor_mean_vestibular_included_paper_figures \
+    --prediction-timing before \
+    --moving-average-window 0 \
+    --smoothing-window 0 \
+     --lc-end-step 10000 \
+
+python -m visualization.make_figures \
+    --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/final_ones/uncorrelated_mean_vestibular_included/config.yaml \
+    --before-step 2000 \
+    --after-step-sensorimotor 10000 \
+    --tempo 0.5 \
+    --output-dir experiments/paper_revision/final_ones/uncorrelated_mean_vestibular_included_paper_figures \
+    --prediction-timing before \
+    --moving-average-window 0 \
+    --smoothing-window 0 \
+     --lc-end-step 10000 \
+    --ao-step-1 10000 --ao-step-2 100000 \
+
+python -m visualization.make_figures \
+    --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/best_params_20260315_220431_trial_485_mean_vestibular_included_20260328_002310_20260329_105456_doublebeat/config.yaml \
+    --before-step 2000 \
+    --after-step-sensorimotor 80000 \
+    --tempo 0.5 \
+    --output-dir visualization/paper_output_trial_485_mean_vestibular_included_doublebeat_80000 \
+    --prediction-timing before \
+    --moving-average-window 0 \
+    --smoothing-window 0 \
+     --lc-end-step 100000 \
 
 python -m visualization.make_figures \
     --sensorimotor-config /Users/matin/mcmaster/cannonlab/phd_codes/predictive_coding/rhythmic_pc_rnn/experiments/paper_revision/uncorrelated_control_white_noise_phase_random/config.yaml \

@@ -762,6 +762,168 @@ def plot_combined_multi_panel(
 # Summary figure: Learning curve + after-training panels
 # ---------------------------------------------------------------------------
 
+def plot_ao_comparison(
+    data: Dict[str, np.ndarray],
+    start_cycle: int = 0,
+    end_cycle: int = 6,
+    figsize: Tuple[float, float] = (21, 10),
+) -> plt.Figure:
+    """
+    2x3 comparison: training input | AO at step 1 | AO at step 2.
+
+    Shows how auditory-only predictions evolve across two training stages.
+    For uncorrelated experiments the left panel displays the random auditory
+    input while the AO panels use aligned (sensorimotor) inputs.
+
+    Layout:
+        Col 1: Training input (raw signals from original config)
+        Col 2: Auditory-only predictions at step 1
+        Col 3: Auditory-only predictions at step 2
+        Row 1: Vestibular
+        Row 2: Auditory
+
+    Args:
+        data: Dict with keys vest_seq_input, beat_seq_input,
+              vest_seq_aligned, beat_seq_aligned,
+              vest_pred_step1, beat_pred_step1,
+              vest_pred_step2, beat_pred_step2,
+              ao_step_1, ao_step_2
+        start_cycle: Starting cycle (0-based)
+        end_cycle: Ending cycle
+        figsize: Figure size
+
+    Returns:
+        matplotlib Figure
+    """
+    actual_color = COLORS['actual']
+    pred_color = COLORS['vest_pred']
+
+    ao_step_1 = int(data['ao_step_1'])
+    ao_step_2 = int(data['ao_step_2'])
+
+    # Detect cycle length from the aligned beat sequence
+    _, cycle_length = _detect_cycles(data['beat_seq_aligned'])
+    start_idx = start_cycle * cycle_length
+    end_idx = end_cycle * cycle_length
+
+    # Slice all arrays
+    def _sl(arr: np.ndarray) -> np.ndarray:
+        return arr[start_idx:end_idx]
+
+    vest_input = _sl(data['vest_seq_input'])
+    beat_input = _sl(data['beat_seq_input'])
+    vest_aligned = _sl(data['vest_seq_aligned'])
+    beat_aligned = _sl(data['beat_seq_aligned'])
+    vest_pred_1 = _sl(data['vest_pred_step1'])
+    beat_pred_1 = _sl(data['beat_pred_step1'])
+    vest_pred_2 = _sl(data['vest_pred_step2'])
+    beat_pred_2 = _sl(data['beat_pred_step2'])
+
+    time_steps = np.arange(len(vest_input))
+
+    # Y-axis limits (include all data across panels)
+    vest_ylim = _compute_ylim([
+        vest_input, vest_aligned, vest_pred_1, vest_pred_2,
+    ])
+    beat_ylim = _compute_ylim([
+        beat_input, beat_aligned, beat_pred_1, beat_pred_2,
+    ])
+
+    fig, axes = plt.subplots(2, 3, figsize=figsize)
+    ax1, ax2, ax3 = axes[0]  # Top row: vestibular
+    ax4, ax5, ax6 = axes[1]  # Bottom row: auditory
+
+    # --- Col 1: Training input ---
+    ax1.plot(time_steps, vest_input, color=actual_color, linestyle='-',
+             linewidth=1.5, alpha=1, label='Vestibular Input')
+    ax1.set_title('Vestibular', fontweight='bold')
+    ax1.set_ylabel('Vestibular Signal')
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=STYLES['grid_alpha'])
+    ax1.set_ylim(vest_ylim)
+
+    ax4.plot(time_steps, beat_input, color=actual_color, linestyle='-',
+             linewidth=1.5, alpha=1, label='Auditory Input')
+    ax4.set_title('Auditory', fontweight='bold')
+    ax4.set_xlabel('Time Steps')
+    ax4.set_ylabel('Auditory Signal')
+    ax4.legend(loc='upper right')
+    ax4.grid(True, alpha=STYLES['grid_alpha'])
+    ax4.set_ylim(beat_ylim)
+
+    # --- Col 2: AO at step 1 ---
+    ax2.plot(time_steps, vest_aligned, color=actual_color, linestyle=':',
+             linewidth=1.5, alpha=0.5,
+             label='Vestibular Signal (not provided)')
+    ax2.plot(time_steps, vest_pred_1, color=pred_color, linestyle='-',
+             linewidth=1.5, alpha=0.9, label='Predicted Vestibular')
+    ax2.set_title('Vestibular', fontweight='bold')
+    ax2.legend(loc='upper right')
+    ax2.grid(True, alpha=STYLES['grid_alpha'])
+    ax2.set_ylim(vest_ylim)
+
+    ax5.plot(time_steps, beat_aligned, color=actual_color, linestyle='--',
+             linewidth=STYLES['ground_truth_linewidth'],
+             alpha=STYLES['ground_truth_alpha'], label='Auditory Input')
+    ax5.plot(time_steps, beat_pred_1, color=pred_color, linestyle='-',
+             linewidth=STYLES['prediction_linewidth'],
+             alpha=STYLES['prediction_alpha'], label='Predicted Auditory')
+    ax5.set_title('Auditory', fontweight='bold')
+    ax5.set_xlabel('Time Steps')
+    ax5.legend(loc='upper right')
+    ax5.grid(True, alpha=STYLES['grid_alpha'])
+    ax5.set_ylim(beat_ylim)
+
+    # --- Col 3: AO at step 2 ---
+    ax3.plot(time_steps, vest_aligned, color=actual_color, linestyle=':',
+             linewidth=1.5, alpha=0.5,
+             label='Vestibular Signal (not provided)')
+    ax3.plot(time_steps, vest_pred_2, color=pred_color, linestyle='-',
+             linewidth=1.5, alpha=0.9, label='Predicted Vestibular')
+    ax3.set_title('Vestibular', fontweight='bold')
+    ax3.legend(loc='upper right')
+    ax3.grid(True, alpha=STYLES['grid_alpha'])
+    ax3.set_ylim(vest_ylim)
+
+    ax6.plot(time_steps, beat_aligned, color=actual_color, linestyle='--',
+             linewidth=STYLES['ground_truth_linewidth'],
+             alpha=STYLES['ground_truth_alpha'], label='Auditory Input')
+    ax6.plot(time_steps, beat_pred_2, color=pred_color, linestyle='-',
+             linewidth=STYLES['prediction_linewidth'],
+             alpha=STYLES['prediction_alpha'], label='Predicted Auditory')
+    ax6.set_title('Auditory', fontweight='bold')
+    ax6.set_xlabel('Time Steps')
+    ax6.legend(loc='upper right')
+    ax6.grid(True, alpha=STYLES['grid_alpha'])
+    ax6.set_ylim(beat_ylim)
+
+    # X-axis limits
+    for ax in axes.flat:
+        ax.set_xlim(0, len(time_steps) - 1)
+
+    # Beat vlines — left panel uses input beat, middle/right use aligned beat
+    _add_beat_vlines(ax1, time_steps, beat_input)
+    _add_beat_vlines(ax4, time_steps, beat_input)
+    for ax in [ax2, ax3, ax5, ax6]:
+        _add_beat_vlines(ax, time_steps, beat_aligned)
+
+    # Remove chart junk
+    for ax in axes.flat:
+        remove_chart_junk(ax)
+
+    # Column headers
+    fig.text(0.17, 0.95, 'TRAINING INPUT', ha='center',
+             fontsize=16, fontweight='bold')
+    fig.text(0.5, 0.95, f'AUDITORY-ONLY \u2014 Step {ao_step_1}', ha='center',
+             fontsize=16, fontweight='bold')
+    fig.text(0.83, 0.95, f'AUDITORY-ONLY \u2014 Step {ao_step_2}', ha='center',
+             fontsize=16, fontweight='bold')
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.9)
+    return fig
+
+
 def plot_summary(
     lc_steps: np.ndarray,
     lc_errors: np.ndarray,
