@@ -358,8 +358,8 @@ def plot_before_after_2x2(
         remove_chart_junk(ax)
 
     # Column headers
-    fig.text(0.25, 0.95, title_before, ha='center', fontsize=16, fontweight='bold')
-    fig.text(0.75, 0.95, title_after, ha='center', fontsize=16, fontweight='bold')
+    fig.text(0.25, 0.95, title_before, ha='center', fontsize=20, fontweight='bold')
+    fig.text(0.75, 0.95, title_after, ha='center', fontsize=20, fontweight='bold')
 
     plt.tight_layout()
     plt.subplots_adjust(top=0.9)
@@ -589,7 +589,7 @@ def plot_double_auditory_1x2(
     for ax in [ax1, ax2]:
         remove_chart_junk(ax)
 
-    fig.text(0.5, 0.95, 'Pulse Training', ha='center', fontsize=16, fontweight='bold')
+    fig.text(0.5, 0.95, 'Pulse Training', ha='center', fontsize=20, fontweight='bold')
 
     plt.tight_layout()
     plt.subplots_adjust(top=0.85)
@@ -746,12 +746,151 @@ def plot_combined_multi_panel(
         remove_chart_junk(ax)
 
     # Column headers
-    fig.text(0.17, 0.95, 'TRAINING INPUT', ha='center', fontsize=16, fontweight='bold')
-    fig.text(0.5, 0.95, 'AFTER TRAINING', ha='center', fontsize=16, fontweight='bold')
+    fig.text(0.17, 0.95, 'TRAINING INPUT', ha='center', fontsize=20, fontweight='bold')
+    fig.text(0.5, 0.95, 'AFTER TRAINING', ha='center', fontsize=20, fontweight='bold')
     fig.text(
         0.83, 0.95, 'AFTER TRAINING \u2014 AUDITORY-ONLY',
-        ha='center', fontsize=16, fontweight='bold',
+        ha='center', fontsize=20, fontweight='bold',
     )
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.9)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Combined multi-panel figure (2x2, no input column)
+# ---------------------------------------------------------------------------
+
+def plot_combined_2x2(
+    data_sensorimotor: Dict[str, np.ndarray],
+    data_auditory_only: Dict[str, np.ndarray],
+    max_cycles: int = 6,
+    start_cycle_ao: int = 2,
+    end_cycle_ao: int = 8,
+    figsize: Tuple[float, float] = (14, 10),
+) -> plt.Figure:
+    """
+    2x2 figure: sensorimotor after-training + auditory-only after-training.
+
+    Same as plot_combined_multi_panel but without the left input column.
+
+    Layout:
+        Col 1: After training (sensorimotor)
+        Col 2: After training — auditory only
+        Row 1: Vestibular
+        Row 2: Auditory
+
+    Args:
+        data_sensorimotor: Before/after data for sensorimotor condition
+        data_auditory_only: Before/after data for auditory-only condition
+        max_cycles: Cycles to show for sensorimotor panels
+        start_cycle_ao: Starting cycle for auditory-only panels
+        end_cycle_ao: Ending cycle for auditory-only panels
+        figsize: Figure size
+
+    Returns:
+        matplotlib Figure
+    """
+    actual_color = COLORS['actual']
+    pred_color = COLORS['vest_pred']
+
+    # Process sensorimotor data
+    _, cycle_length_sm = _detect_cycles(data_sensorimotor['beat_seq_after'])
+    min_length_sm = min(len(v) for v in data_sensorimotor.values())
+    max_points_sm = min(max_cycles * cycle_length_sm, min_length_sm)
+    d_sm = {k: v[:max_points_sm] for k, v in data_sensorimotor.items()}
+    time_sm = np.arange(max_points_sm)
+
+    # Process auditory-only data
+    _, cycle_length_ao = _detect_cycles(data_auditory_only['beat_seq_after'])
+    d_ao = _slice_to_cycles(
+        data_auditory_only, start_cycle_ao, end_cycle_ao, cycle_length_ao,
+    )
+    time_ao = np.arange(len(d_ao['vest_pred_after']))
+
+    # Y-axis limits
+    vest_ylim_sm = _compute_ylim([
+        d_sm['vest_seq_after'], d_sm['vest_pred_after'],
+    ])
+    beat_ylim_sm = _compute_ylim([
+        d_sm['beat_seq_after'], d_sm['beat_pred_after'],
+    ])
+    vest_ylim_ao = _compute_ylim([
+        d_ao['vest_seq_after'], d_ao['vest_pred_after'],
+    ])
+    beat_ylim_ao = _compute_ylim([
+        d_ao['beat_seq_after'], d_ao['beat_pred_after'],
+    ])
+
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    ax1, ax2 = axes[0]  # Top row: vestibular
+    ax3, ax4 = axes[1]  # Bottom row: auditory
+
+    # --- Col 1: After training (sensorimotor) ---
+    ax1.plot(time_sm, d_sm['vest_seq_after'], color=actual_color, linestyle='--',
+             linewidth=1.5, alpha=0.8, label='Vestibular Input')
+    ax1.plot(time_sm, d_sm['vest_pred_after'], color=pred_color, linestyle='-',
+             linewidth=1.5, alpha=0.9, label='Predicted Vestibular Signal')
+    ax1.set_title('Vestibular', fontweight='bold')
+    ax1.set_ylabel('Vestibular Signal')
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=STYLES['grid_alpha'])
+    ax1.set_ylim(vest_ylim_sm)
+
+    ax3.plot(time_sm, d_sm['beat_seq_after'], color=actual_color, linestyle='--',
+             linewidth=1.5, alpha=0.8, label='Auditory Input')
+    ax3.plot(time_sm, d_sm['beat_pred_after'], color=pred_color, linestyle='-',
+             linewidth=1.5, alpha=0.9, label='Predicted Auditory Signal')
+    ax3.set_title('Auditory', fontweight='bold')
+    ax3.set_xlabel('Time Steps')
+    ax3.set_ylabel('Auditory Signal')
+    ax3.legend(loc='upper right')
+    ax3.grid(True, alpha=STYLES['grid_alpha'])
+    ax3.set_ylim(beat_ylim_sm)
+
+    # --- Col 2: After training — auditory only ---
+    ax2.plot(time_ao, d_ao['vest_seq_after'], color=actual_color, linestyle=':',
+             linewidth=1.5, alpha=0.5,
+             label='Vestibular Signal (not provided)')
+    ax2.plot(time_ao, d_ao['vest_pred_after'], color=pred_color, linestyle='-',
+             linewidth=1.5, alpha=1, label='Predicted Vestibular Signal')
+    ax2.set_title('Vestibular', fontweight='bold')
+    ax2.legend(loc='upper right')
+    ax2.grid(True, alpha=STYLES['grid_alpha'])
+    ax2.set_ylim(vest_ylim_ao)
+
+    ax4.plot(time_ao, d_ao['beat_seq_after'], color=actual_color, linestyle='--',
+             linewidth=1.5, alpha=1, label='Auditory Input')
+    ax4.plot(time_ao, d_ao['beat_pred_after'], color=pred_color, linestyle='-',
+             linewidth=1.5, alpha=1, label='Predicted Auditory Signal')
+    ax4.set_title('Auditory', fontweight='bold')
+    ax4.set_xlabel('Time Steps')
+    ax4.legend(loc='upper right')
+    ax4.grid(True, alpha=STYLES['grid_alpha'])
+    ax4.set_ylim(beat_ylim_ao)
+
+    # X-axis limits
+    for ax in [ax1, ax3]:
+        ax.set_xlim(0, max_points_sm - 1)
+    for ax in [ax2, ax4]:
+        ax.set_xlim(0, len(time_ao) - 1)
+
+    # Beat vlines
+    _add_beat_vlines(ax1, time_sm, d_sm['beat_seq_after'])
+    _add_beat_vlines(ax3, time_sm, d_sm['beat_seq_after'])
+    _add_beat_vlines(ax2, time_ao, d_ao['beat_seq_after'])
+    _add_beat_vlines(ax4, time_ao, d_ao['beat_seq_after'])
+
+    # Remove chart junk
+    for ax in axes.flat:
+        remove_chart_junk(ax)
+
+    # Column headers
+    fig.text(0.3, 0.95, 'AFTER TRAINING',
+             ha='center', fontsize=20, fontweight='bold')
+    fig.text(0.74, 0.95, 'AFTER TRAINING \u2014 AUDITORY-ONLY',
+             ha='center', fontsize=20, fontweight='bold')
 
     plt.tight_layout()
     plt.subplots_adjust(top=0.9)
@@ -913,11 +1052,140 @@ def plot_ao_comparison(
 
     # Column headers
     fig.text(0.17, 0.95, 'TRAINING INPUT', ha='center',
-             fontsize=16, fontweight='bold')
+             fontsize=20, fontweight='bold')
     fig.text(0.5, 0.95, f'AUDITORY-ONLY \u2014 Step {ao_step_1}', ha='center',
-             fontsize=16, fontweight='bold')
+             fontsize=20, fontweight='bold')
     fig.text(0.83, 0.95, f'AUDITORY-ONLY \u2014 Step {ao_step_2}', ha='center',
-             fontsize=16, fontweight='bold')
+             fontsize=20, fontweight='bold')
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.9)
+    return fig
+
+
+def plot_ao_comparison_2x2(
+    data: Dict[str, np.ndarray],
+    start_cycle: int = 0,
+    end_cycle: int = 6,
+    figsize: Tuple[float, float] = (14, 10),
+) -> plt.Figure:
+    """
+    2x2 AO comparison: step 1 | step 2 (no input column).
+
+    Same data as plot_ao_comparison but only the two auditory-only panels.
+
+    Layout:
+        Col 1: Auditory-only predictions at step 1
+        Col 2: Auditory-only predictions at step 2
+        Row 1: Vestibular
+        Row 2: Auditory
+
+    Args:
+        data: Dict with keys vest_seq_aligned, beat_seq_aligned,
+              vest_pred_step1, beat_pred_step1,
+              vest_pred_step2, beat_pred_step2,
+              ao_step_1, ao_step_2
+        start_cycle: Starting cycle (0-based)
+        end_cycle: Ending cycle
+        figsize: Figure size
+
+    Returns:
+        matplotlib Figure
+    """
+    actual_color = COLORS['actual']
+    pred_color = COLORS['vest_pred']
+
+    ao_step_1 = int(data['ao_step_1'])
+    ao_step_2 = int(data['ao_step_2'])
+
+    _, cycle_length = _detect_cycles(data['beat_seq_aligned'])
+    start_idx = start_cycle * cycle_length
+    end_idx = end_cycle * cycle_length
+
+    def _sl(arr: np.ndarray) -> np.ndarray:
+        return arr[start_idx:end_idx]
+
+    vest_aligned = _sl(data['vest_seq_aligned'])
+    beat_aligned = _sl(data['beat_seq_aligned'])
+    vest_pred_1 = _sl(data['vest_pred_step1'])
+    beat_pred_1 = _sl(data['beat_pred_step1'])
+    vest_pred_2 = _sl(data['vest_pred_step2'])
+    beat_pred_2 = _sl(data['beat_pred_step2'])
+
+    time_steps = np.arange(len(vest_aligned))
+
+    vest_ylim = _compute_ylim([vest_aligned, vest_pred_1, vest_pred_2])
+    beat_ylim = _compute_ylim([beat_aligned, beat_pred_1, beat_pred_2])
+
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    ax1, ax2 = axes[0]  # Top row: vestibular
+    ax3, ax4 = axes[1]  # Bottom row: auditory
+
+    # --- Col 1: AO at step 1 ---
+    ax1.plot(time_steps, vest_aligned, color=actual_color, linestyle=':',
+             linewidth=1.5, alpha=0.5,
+             label='Vestibular Signal (not provided)')
+    ax1.plot(time_steps, vest_pred_1, color=pred_color, linestyle='-',
+             linewidth=1.5, alpha=0.9, label='Predicted Vestibular')
+    ax1.set_title('Vestibular', fontweight='bold')
+    ax1.set_ylabel('Vestibular Signal')
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=STYLES['grid_alpha'])
+    ax1.set_ylim(vest_ylim)
+
+    ax3.plot(time_steps, beat_aligned, color=actual_color, linestyle='--',
+             linewidth=STYLES['ground_truth_linewidth'],
+             alpha=STYLES['ground_truth_alpha'], label='Auditory Input')
+    ax3.plot(time_steps, beat_pred_1, color=pred_color, linestyle='-',
+             linewidth=STYLES['prediction_linewidth'],
+             alpha=STYLES['prediction_alpha'], label='Predicted Auditory')
+    ax3.set_title('Auditory', fontweight='bold')
+    ax3.set_xlabel('Time Steps')
+    ax3.set_ylabel('Auditory Signal')
+    ax3.legend(loc='upper right')
+    ax3.grid(True, alpha=STYLES['grid_alpha'])
+    ax3.set_ylim(beat_ylim)
+
+    # --- Col 2: AO at step 2 ---
+    ax2.plot(time_steps, vest_aligned, color=actual_color, linestyle=':',
+             linewidth=1.5, alpha=0.5,
+             label='Vestibular Signal (not provided)')
+    ax2.plot(time_steps, vest_pred_2, color=pred_color, linestyle='-',
+             linewidth=1.5, alpha=0.9, label='Predicted Vestibular')
+    ax2.set_title('Vestibular', fontweight='bold')
+    ax2.legend(loc='upper right')
+    ax2.grid(True, alpha=STYLES['grid_alpha'])
+    ax2.set_ylim(vest_ylim)
+
+    ax4.plot(time_steps, beat_aligned, color=actual_color, linestyle='--',
+             linewidth=STYLES['ground_truth_linewidth'],
+             alpha=STYLES['ground_truth_alpha'], label='Auditory Input')
+    ax4.plot(time_steps, beat_pred_2, color=pred_color, linestyle='-',
+             linewidth=STYLES['prediction_linewidth'],
+             alpha=STYLES['prediction_alpha'], label='Predicted Auditory')
+    ax4.set_title('Auditory', fontweight='bold')
+    ax4.set_xlabel('Time Steps')
+    ax4.legend(loc='upper right')
+    ax4.grid(True, alpha=STYLES['grid_alpha'])
+    ax4.set_ylim(beat_ylim)
+
+    # X-axis limits
+    for ax in axes.flat:
+        ax.set_xlim(0, len(time_steps) - 1)
+
+    # Beat vlines
+    for ax in axes.flat:
+        _add_beat_vlines(ax, time_steps, beat_aligned)
+
+    # Remove chart junk
+    for ax in axes.flat:
+        remove_chart_junk(ax)
+
+    # Column headers
+    fig.text(0.3, 0.95, f'AUDITORY-ONLY \u2014 Step {ao_step_1}',
+             ha='center', fontsize=20, fontweight='bold')
+    fig.text(0.74, 0.95, f'AUDITORY-ONLY \u2014 Step {ao_step_2}',
+             ha='center', fontsize=20, fontweight='bold')
 
     plt.tight_layout()
     plt.subplots_adjust(top=0.9)
@@ -1088,10 +1356,10 @@ def plot_summary(
     remove_chart_junk(ax_aa)
 
     # Column headers for the 2x2 panel area
-    fig.text(0.3, 0.64, 'AFTER TRAINING', ha='center', fontsize=14, fontweight='bold')
+    fig.text(0.3, 0.64, 'AFTER TRAINING', ha='center', fontsize=18, fontweight='bold')
     fig.text(
         0.74, 0.64, 'AFTER TRAINING \u2014 AUDITORY-ONLY',
-        ha='center', fontsize=14, fontweight='bold',
+        ha='center', fontsize=18, fontweight='bold',
     )
 
     return fig

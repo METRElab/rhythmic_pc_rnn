@@ -9,13 +9,13 @@ import matplotlib.pyplot as plt
 
 
 PAPER_RCPARAMS = {
-    'font.size': 12,
-    'axes.titlesize': 14,
-    'axes.labelsize': 12,
-    'xtick.labelsize': 10,
-    'ytick.labelsize': 10,
-    'legend.fontsize': 10,
-    'figure.titlesize': 16,
+    'font.size': 16,
+    'axes.titlesize': 18,
+    'axes.labelsize': 16,
+    'xtick.labelsize': 14,
+    'ytick.labelsize': 14,
+    'legend.fontsize': 13,
+    'figure.titlesize': 20,
     'lines.linewidth': 2,
     'figure.dpi': 300,
     'savefig.dpi': 300,

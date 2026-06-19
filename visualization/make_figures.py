@@ -46,7 +46,9 @@ from visualization.generate_figure_data import (
 )
 from visualization.paper_figures import (
     plot_ao_comparison,
+    plot_ao_comparison_2x2,
     plot_before_after_2x2,
+    plot_combined_2x2,
     plot_combined_multi_panel,
     plot_continuation,
     plot_double_auditory_1x2,
@@ -252,6 +254,17 @@ def generate_figures(
         )
         print(f"  Saved to {figures_dir / 'figure_combined.png'}")
 
+        # Combined 2x2 (no input column)
+        fig = plot_combined_2x2(
+            sm_data, ao_data,
+            max_cycles=6, start_cycle_ao=2, end_cycle_ao=8,
+        )
+        fig.savefig(
+            figures_dir / 'figure_combined_2x2.png',
+            dpi=300, bbox_inches='tight', facecolor='white',
+        )
+        print(f"  Saved to {figures_dir / 'figure_combined_2x2.png'}")
+
     # Summary figure: Learning curve + after-training panels
     step += 1
     if lc_sm_path.exists() and sm_path.exists() and ao_path.exists():
@@ -295,6 +308,18 @@ def generate_figures(
             dpi=300, bbox_inches='tight', facecolor='white',
         )
         print(f"  Saved to {figures_dir / 'figure_ao_comparison.png'}")
+
+        # AO comparison 2x2 (no input column)
+        fig = plot_ao_comparison_2x2(
+            ao_cmp_data,
+            start_cycle=ao_start_cycle,
+            end_cycle=ao_end_cycle,
+        )
+        fig.savefig(
+            figures_dir / 'figure_ao_comparison_2x2.png',
+            dpi=300, bbox_inches='tight', facecolor='white',
+        )
+        print(f"  Saved to {figures_dir / 'figure_ao_comparison_2x2.png'}")
 
     # Doublebeat figures (only if data exists)
     if has_doublebeat:
