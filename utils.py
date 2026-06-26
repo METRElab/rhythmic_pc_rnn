@@ -179,6 +179,225 @@ def generate_random_pulses(
     return torch.FloatTensor(pulse_sequence)
 
 
+def _envelope_kernel(shape: str, width: float, dt: float) -> np.ndarray:
+    """
+    Build a single-beat auditory kernel, sampled at dt and peak-normalized to 1.
+
+    These kernels turn a discrete footstrike onset into a continuous acoustic
+    envelope. They span the "discrete -> continuous" axis that Reviewer 2 asked
+    us to test:
+
+        'exp'   : sharp attack, exponential decay (footstrike + reverberation).
+                  width = decay time constant tau (seconds). k(t) = exp(-t/tau).
+        'alpha' : gradual ("shallow") attack and decay, peaking at t = width.
+                  Models a low-pass-filtered, bone-conducted impulse with a soft,
+                  variable attack. k(t) = (t/w) * exp(1 - t/w), peak 1 at t = w.
+        'gauss' : symmetric smear of width (sigma) `width`, rising from the onset.
+
+    Width is specified in absolute seconds (NOT scaled to tempo) on purpose: a
+    physical footstep decay does not know how fast the mother is walking, so a
+    fixed-width envelope cannot scale across tempos the way the vestibular
+    triangle does. That contrast is the point of the multi-tempo experiment.
+
+    Args:
+        shape: One of 'exp', 'alpha', 'gauss'.
+        width: Kernel width in seconds (tau / peak-time / sigma depending on shape).
+        dt: Timestep size in seconds.
+
+    Returns:
+        1-D kernel array, peak value 1.0.
+    """
+    width = max(float(width), dt)
+    if shape == 'exp':
+        length = max(5.0 * width, dt)
+        n = np.arange(0, length, dt)
+        k = np.exp(-n / width)
+    elif shape == 'alpha':
+        length = max(8.0 * width, dt)
+        n = np.arange(0, length, dt)
+        k = (n / width) * np.exp(1.0 - n / width)
+    elif shape == 'gauss':
+        length = max(6.0 * width, dt)
+        n = np.arange(0, length, dt)
+        center = 3.0 * width
+        k = np.exp(-((n - center) ** 2) / (2.0 * width ** 2))
+    else:
+        raise ValueError(
+            f"Unknown auditory envelope shape: {shape}. "
+            "Must be 'pulse', 'exp', 'alpha', or 'gauss'."
+        )
+    peak = k.max()
+    if peak > 0:
+        k = k / peak
+    return k
+
+
+def generate_auditory_envelope(
+    onset_indices: np.ndarray,
+    n_steps: int,
+    dt: float,
+    envelope_config: Dict[str, Any],
+    rng: Optional[np.random.Generator] = None,
+) -> np.ndarray:
+    """
+    Render a continuous auditory envelope by placing a kernel at each beat onset.
+
+    Each onset contributes a copy of the configured kernel; overlapping tails are
+    summed, so as the width grows the signal smoothly fills the inter-beat gaps
+    and becomes quasi-continuous. Per-beat amplitude and width variability model
+    the "highly variable shape and amplitude of attack" Reviewer 2 describes.
+
+    Args:
+        onset_indices: Integer sample indices of beat onsets.
+        n_steps: Length of the output sequence.
+        dt: Timestep size in seconds.
+        envelope_config: dict with keys
+            - shape: 'exp' | 'alpha' | 'gauss'
+            - width: kernel width in seconds
+            - amplitude_jitter: fractional +/- amplitude variation per beat (0 = none)
+            - width_jitter: fractional +/- width variation per beat (0 = none)
+        rng: NumPy random generator (used only when jitter > 0).
+
+    Returns:
+        1-D float array of length n_steps (not normalized; peak ~1 per isolated beat,
+        higher where tails overlap, which is the intended smear-to-continuous limit).
+    """
+    shape = envelope_config.get('shape', 'exp')
+    width = float(envelope_config.get('width', 0.1))
+    amplitude_jitter = float(envelope_config.get('amplitude_jitter', 0.0))
+    width_jitter = float(envelope_config.get('width_jitter', 0.0))
+
+    if rng is None and (amplitude_jitter > 0 or width_jitter > 0):
+        rng = np.random.default_rng()
+
+    out = np.zeros(n_steps)
+    for idx in onset_indices:
+        w = width
+        if width_jitter > 0:
+            w = width * (1.0 + width_jitter * rng.uniform(-1.0, 1.0))
+        kernel = _envelope_kernel(shape, w, dt)
+        amp = 1.0
+        if amplitude_jitter > 0:
+            amp = max(0.0, 1.0 + amplitude_jitter * rng.uniform(-1.0, 1.0))
+        end = min(idx + len(kernel), n_steps)
+        out[idx:end] += amp * kernel[: end - idx]
+    return out
+
+
+def generate_gait_beat_times(
+    duration: float,
+    tempo: float,
+    phi: float,
+    gait_config: Dict[str, Any],
+    rng: Optional[np.random.Generator] = None,
+) -> np.ndarray:
+    """
+    Generate beat onset times with naturalistic stride-to-stride timing variability.
+
+    Addresses Reviewer 2's point about the fractal (1/f) dynamics of human gait.
+    Two modes:
+        'white'   : inter-beat intervals are i.i.d. around the mean tempo
+                    (un-autocorrelated variation).
+        'fractal' : inter-beat intervals carry long-range (1/f) correlations,
+                    matching the well-documented fractal structure of gait. Built
+                    by spectral synthesis with power spectrum ~ 1/f^(2H-1).
+
+    The returned onset times are used to build BOTH the auditory beats and the
+    vestibular triangle, so the two modalities stay phase-locked while the tempo
+    wanders naturally.
+
+    Args:
+        duration: Total sequence duration in seconds.
+        tempo: Mean inter-beat interval in seconds.
+        phi: Time of the first onset (random-phase offset).
+        gait_config: dict with keys
+            - mode: 'white' | 'fractal'
+            - sigma: fractional std of inter-beat interval (e.g. 0.04 = 4%)
+            - hurst: Hurst exponent for 'fractal' (0.5 = white, ->1 = strong 1/f)
+        rng: NumPy random generator.
+
+    Returns:
+        1-D array of onset times (seconds) within [phi, duration).
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    mode = gait_config.get('mode', 'fractal')
+    sigma = float(gait_config.get('sigma', 0.04))
+    hurst = float(gait_config.get('hurst', 0.85))
+
+    # Generous upper bound on the number of beats, then trim to duration.
+    n_beats = int(np.ceil(duration / tempo)) + 8
+
+    if mode == 'white':
+        series = rng.standard_normal(n_beats)
+    elif mode == 'fractal':
+        # Spectral synthesis of 1/f^beta noise (beta = 2H - 1).
+        freqs = np.fft.rfftfreq(n_beats)
+        freqs[0] = freqs[1] if len(freqs) > 1 else 1.0
+        beta = 2.0 * hurst - 1.0
+        amplitude = 1.0 / np.power(freqs, beta / 2.0)
+        amplitude[0] = 0.0  # zero-mean
+        phases = rng.uniform(0, 2 * np.pi, len(freqs))
+        spectrum = amplitude * np.exp(1j * phases)
+        series = np.fft.irfft(spectrum, n=n_beats)
+    else:
+        raise ValueError(
+            f"Unknown gait_variability mode: {mode}. Must be 'none', 'white', or 'fractal'."
+        )
+
+    std = series.std()
+    if std > 0:
+        series = series / std
+
+    # Multiplicative variation around the mean tempo; keep intervals positive.
+    intervals = tempo * (1.0 + sigma * series)
+    intervals = np.clip(intervals, 0.25 * tempo, None)
+
+    onset_times = phi + np.cumsum(np.concatenate([[0.0], intervals]))
+    return onset_times[onset_times < duration]
+
+
+def triangular_wave_from_onsets(
+    onset_times: np.ndarray,
+    t: np.ndarray,
+    tempo: float,
+) -> np.ndarray:
+    """
+    Build a triangular vestibular waveform locked to (possibly irregular) onsets.
+
+    Within each [onset_i, onset_{i+1}] interval the wave peaks at +1 on the onset
+    and dips to -1 at the interval midpoint, matching the regular-tempo convention
+    `1 - 2|sawtooth|`. This keeps the vestibular signal phase-locked to variable
+    beat times so the auditory-vestibular correlation is preserved under gait
+    variability.
+
+    Args:
+        onset_times: Beat onset times (seconds).
+        t: Sample time grid (seconds).
+        tempo: Mean inter-beat interval, used to extrapolate beyond the onset range.
+
+    Returns:
+        1-D vestibular waveform aligned to `t`.
+    """
+    onsets = list(np.asarray(onset_times, dtype=float))
+    if not onsets:
+        onsets = [0.0]
+    # Pad so every sample falls inside an interval.
+    while onsets[0] > t[0]:
+        onsets.insert(0, onsets[0] - tempo)
+    while onsets[-1] < t[-1] + tempo:
+        onsets.append(onsets[-1] + tempo)
+    onsets = np.asarray(onsets)
+
+    idx = np.searchsorted(onsets, t, side='right') - 1
+    idx = np.clip(idx, 0, len(onsets) - 2)
+    t0 = onsets[idx]
+    t1 = onsets[idx + 1]
+    phase = (t - t0) / np.maximum(t1 - t0, 1e-12)  # local phase in [0, 1]
+    return 1.0 - 4.0 * np.minimum(phase, 1.0 - phase)
+
+
 def generate_input_sequences(
     config: Dict[str, Any],
     tempo: float,
@@ -202,6 +421,14 @@ def generate_input_sequences(
               (steps_per_period-1)/steps_per_period. Works with any mode.
             - experiment.random_phase (optional): If true, each sequence starts at a
               random phase within the cycle instead of always starting at a beat.
+            - experiment.auditory_envelope (optional): {shape, width, amplitude_jitter,
+              width_jitter}. shape='pulse' (default) keeps the discrete binary beat;
+              'exp'/'alpha'/'gauss' render a continuous acoustic envelope (see
+              generate_auditory_envelope). Applies to the regular-beat modes.
+            - experiment.gait_variability (optional): {mode, sigma, hurst}. mode='none'
+              (default) keeps perfectly periodic beats; 'white'/'fractal' add
+              naturalistic stride-to-stride timing variability shared by the auditory
+              and vestibular streams (see generate_gait_beat_times).
         tempo: Time between beats in seconds
         rng: NumPy random generator for reproducibility (used in 'uncorrelated' mode
             and 'random_phase')
@@ -242,23 +469,47 @@ def generate_input_sequences(
     else:
         phi = 0.0
 
-    # Beat sequence: binary pulse train (regular, correlated with vestibular)
-    beat_times = np.arange(phi, duration, tempo)
-    beat_indices = np.round(beat_times / dt).astype(int)
-    beat_indices = beat_indices[beat_indices < n_steps]
-    beat_sequence = np.zeros(n_steps)
-    beat_sequence[beat_indices] = 1
-    beat_sequence = torch.FloatTensor(beat_sequence)
+    # Beat onset times: perfectly periodic, or with naturalistic gait-timing variability
+    gait_config = exp_config.get('gait_variability') or {}
+    gait_mode = gait_config.get('mode', 'none')
+    variable_timing = gait_mode not in (None, 'none')
+    if variable_timing:
+        onset_times = generate_gait_beat_times(
+            duration=duration, tempo=tempo, phi=phi, gait_config=gait_config, rng=rng
+        )
+    else:
+        onset_times = np.arange(phi, duration, tempo)
 
-    # Zero-mean transform: shift beat pulses so the per-period average is 0
+    onset_indices = np.round(onset_times / dt).astype(int)
+    onset_indices = onset_indices[(onset_indices >= 0) & (onset_indices < n_steps)]
+
+    # Auditory beat signal: discrete binary pulse (default) or a continuous envelope
+    envelope_config = exp_config.get('auditory_envelope') or {}
+    envelope_shape = envelope_config.get('shape', 'pulse')
+    if envelope_shape == 'pulse':
+        beat_signal = np.zeros(n_steps)
+        beat_signal[onset_indices] = 1.0
+    else:
+        beat_signal = generate_auditory_envelope(
+            onset_indices=onset_indices, n_steps=n_steps, dt=dt,
+            envelope_config=envelope_config, rng=rng,
+        )
+
+    # Zero-mean transform: shift the auditory signal so its average is ~0
     zero_mean_beat = exp_config.get('zero_mean_beat', False)
     if zero_mean_beat:
+        # Defined unconditionally so the 'uncorrelated' branch below can reuse them.
         steps_per_period = round(tempo / dt)
         flat_value = -1.0 / steps_per_period
         pulse_value = (steps_per_period - 1.0) / steps_per_period
-        pulse_mask = beat_sequence > 0.5
-        beat_sequence[~pulse_mask] = flat_value
-        beat_sequence[pulse_mask] = pulse_value
+        if envelope_shape == 'pulse':
+            pulse_mask = beat_signal > 0.5
+            beat_signal[~pulse_mask] = flat_value
+            beat_signal[pulse_mask] = pulse_value
+        else:
+            beat_signal = beat_signal - beat_signal.mean()
+
+    beat_sequence = torch.FloatTensor(beat_signal)
 
     if mode == "beat":
         return beat_sequence
@@ -267,11 +518,14 @@ def generate_input_sequences(
         return beat_sequence, beat_sequence
 
     elif mode == "sensorimotor":
-        # Regular vestibular triangular wave, synchronized with beats
-        frequency = 1 / tempo
-        t_shifted = t - phi
-        sawtooth = 2 * (t_shifted * frequency - np.floor(0.5 + t_shifted * frequency))
-        vestibular_tri = 1 - 2 * np.abs(sawtooth)
+        # Vestibular triangular wave, synchronized with the (possibly variable) beats
+        if variable_timing:
+            vestibular_tri = triangular_wave_from_onsets(onset_times, t, tempo)
+        else:
+            frequency = 1 / tempo
+            t_shifted = t - phi
+            sawtooth = 2 * (t_shifted * frequency - np.floor(0.5 + t_shifted * frequency))
+            vestibular_tri = 1 - 2 * np.abs(sawtooth)
         vestibular_sequence = torch.FloatTensor(vestibular_tri)
         return vestibular_sequence, beat_sequence
 

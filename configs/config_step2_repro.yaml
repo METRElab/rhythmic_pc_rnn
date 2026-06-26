@@ -1,0 +1,58 @@
+# STEP 2 baseline reproduction. Identical to the final sensorimotor config
+# (configs/config_revision_base.yaml -> final_ones/sensorimotor) EXCEPT
+# n_training_rounds is 500 instead of 10000: the published run diverged to NaN
+# around step 78000 (~round 390) and was killed near step 94000 (~round 470), so
+# 500 rounds covers the entire real trajectory through divergence. The first 500
+# rounds are byte-for-byte identical regardless of the configured total (same seed,
+# same per-round rng draws), so this faithfully reproduces the published trajectory.
+experiment:
+  dt: 0.05
+  duration: 10.0
+  mode: sensorimotor
+  random_phase: true
+  zero_mean_beat: true
+  n_training_rounds: 500
+  name: rev_step2_baseline
+  random_seed: 746
+  tempo:
+    mode: single
+    value: 0.5
+    min: 0.4
+    max: 0.8
+    step: 0.1
+
+  auditory_envelope:
+    shape: pulse
+    width: 0.1
+    amplitude_jitter: 0.0
+    width_jitter: 0.0
+
+  gait_variability:
+    mode: none
+    sigma: 0.04
+    hurst: 0.85
+
+logging:
+  level: INFO
+
+network:
+  alpha_H: 0.1
+  alpha_x: 1
+  associative_size: 64
+  higher_size: 0
+  inference_learning_rate_H: 0.049706088801492805
+  inference_learning_rate_x: 0.26109253426023427
+  n_inference_steps: 5
+  vestibular_size: 1
+  weight_learning_rate_H: 0.47037325216247716
+  weight_learning_rate_x: 0.49832988896925373
+
+saving:
+  base_dir: experiments/paper_revision
+  log_every: 2000
+
+testing:
+  continuation: false
+  n_inference_rounds: 50
+  prediction_timing: after
+  test_duration: 20.0

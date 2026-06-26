@@ -1,0 +1,60 @@
+# Revision-2 base template: standard sensorimotor, single tempo, DISCRETE pulse.
+# This reproduces the published headline condition through the new input code path
+# (envelope shape = pulse => identical to the original binary beat).
+# The envelope-sweep driver will copy this config and override
+# experiment.auditory_envelope (and experiment.mode) per run.
+experiment:
+  dt: 0.05
+  duration: 10.0
+  mode: sensorimotor
+  random_phase: true
+  zero_mean_beat: true            # flat=-1/spp, pulse=(spp-1)/spp -> the paper's 0.9/-0.1 scheme
+  n_training_rounds: 10000
+  name: rev_base
+  random_seed: 746              # MUST match the final published runs (final_ones/*)
+  tempo:
+    mode: single
+    value: 0.5
+    min: 0.4
+    max: 0.8
+    step: 0.1
+
+  # Discrete by default. To smear the auditory input, set e.g.:
+  #   auditory_envelope: {shape: exp, width: 0.15, amplitude_jitter: 0.0, width_jitter: 0.0}
+  auditory_envelope:
+    shape: pulse                  # pulse | exp | alpha | gauss
+    width: 0.1                    # seconds (ignored for pulse)
+    amplitude_jitter: 0.0
+    width_jitter: 0.0
+
+  # Perfectly periodic by default. For naturalistic gait timing set e.g.:
+  #   gait_variability: {mode: fractal, sigma: 0.04, hurst: 0.85}
+  gait_variability:
+    mode: none                    # none | white | fractal
+    sigma: 0.04
+    hurst: 0.85
+
+logging:
+  level: INFO
+
+network:
+  alpha_H: 0.1
+  alpha_x: 1
+  associative_size: 64
+  higher_size: 0
+  inference_learning_rate_H: 0.049706088801492805
+  inference_learning_rate_x: 0.26109253426023427
+  n_inference_steps: 5
+  vestibular_size: 1
+  weight_learning_rate_H: 0.47037325216247716
+  weight_learning_rate_x: 0.49832988896925373
+
+saving:
+  base_dir: experiments/paper_revision
+  log_every: 2000
+
+testing:
+  continuation: false
+  n_inference_rounds: 50
+  prediction_timing: after
+  test_duration: 20.0

@@ -1,0 +1,56 @@
+# E2 / Step-3 GATE: combined (sensorimotor) across a WIDE tempo range.
+# This is the linchpin run. The vestibular triangle scales with tempo automatically,
+# so the combined condition should learn all tempos. If a single layer (higher_size: 0)
+# cannot hold multiple tempos, enable the hierarchy (higher_size > 0, the tempo-state
+# unit) and/or re-tune with optuna_tune.py before continuing the runbook.
+experiment:
+  dt: 0.05
+  duration: 10.0
+  mode: sensorimotor
+  random_phase: true
+  zero_mean_beat: true
+  n_training_rounds: 10000
+  name: rev_multitempo_combined
+  random_seed: 746              # match the final published runs (only tempo.mode differs)
+  tempo:
+    mode: range
+    value: 0.5
+    min: 0.4
+    max: 0.8
+    step: 0.1                     # -> [0.4, 0.5, 0.6, 0.7, 0.8]
+
+  auditory_envelope:
+    shape: pulse
+    width: 0.1
+    amplitude_jitter: 0.0
+    width_jitter: 0.0
+
+  gait_variability:
+    mode: none
+    sigma: 0.04
+    hurst: 0.85
+
+logging:
+  level: INFO
+
+network:
+  alpha_H: 0.1
+  alpha_x: 1
+  associative_size: 64
+  higher_size: 0                  # try single-layer first; bump > 0 if multi-tempo fails
+  inference_learning_rate_H: 0.049706088801492805
+  inference_learning_rate_x: 0.26109253426023427
+  n_inference_steps: 5
+  vestibular_size: 1
+  weight_learning_rate_H: 0.47037325216247716
+  weight_learning_rate_x: 0.49832988896925373
+
+saving:
+  base_dir: experiments/paper_revision
+  log_every: 2000
+
+testing:
+  continuation: false
+  n_inference_rounds: 50
+  prediction_timing: after
+  test_duration: 20.0
