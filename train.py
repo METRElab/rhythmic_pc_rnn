@@ -164,6 +164,7 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
     accumulated_H_error = 0.0
     steps_since_last_log = 0
     min_avg_vest_inference_error = np.inf
+    diverged = False
 
     # Training loop
     for round_idx in range(config['experiment']['n_training_rounds']):
@@ -245,13 +246,32 @@ def train_sensorimotor(exp_manager: ExperimentManager) -> None:
                 accumulated_H_error = 0.0
                 steps_since_last_log = 0
 
-                # Save model if inference error improved
+                # Save checkpoints: at regular intervals (so the step viewer has a
+                # dense, evenly-spaced trajectory) and on every new best. Skip saving
+                # once predictions have diverged to NaN.
                 avg_vest_inference_error = inference_errors['vest_inference_error']
-                if avg_vest_inference_error < min_avg_vest_inference_error:
-                    min_avg_vest_inference_error = avg_vest_inference_error
+                is_nan = not np.isfinite(avg_vest_inference_error)
+                save_every = config['saving'].get('save_every')
+                do_regular_save = bool(save_every) and (global_step % save_every == 0) and not is_nan
+                is_new_best = avg_vest_inference_error < min_avg_vest_inference_error
+                if do_regular_save or is_new_best:
                     exp_manager.save_model(network, global_step)
+                if is_new_best:
+                    min_avg_vest_inference_error = avg_vest_inference_error
+
+                # Train "until NaN": stop once predictions diverge (avoids logging
+                # thousands of NaN steps; the last good checkpoint is already saved).
+                if is_nan:
+                    exp_manager.logger.info(
+                        f"Inference error is NaN at step {global_step}; stopping (divergence)."
+                    )
+                    diverged = True
+                    break
 
             steps_since_last_log += 1
+
+        if diverged:
+            break
 
     # Finish experiment
     exp_manager.finish()

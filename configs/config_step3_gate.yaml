@@ -1,25 +1,27 @@
-# E1 example: combined sensorimotor at a single tempo with a SMEARED auditory
-# envelope (exponential decay, tau = 0.15 s). Example of one point on the
-# discrete->continuous sweep axis. The sweep driver will vary shape/width.
+# STEP 3 GATE: combined (sensorimotor) across a WIDE tempo range (0.4-0.8).
+# Identical to the final sensorimotor config (seed 746, pulse auditory) EXCEPT
+# tempo.mode = range. Trains up to 1000 rounds (~200k steps) or until it diverges
+# to NaN, whichever first; checkpoints every 2000 steps feed the step/tempo viewer.
+# Tests whether the vestibular-scaffolded combined condition holds multiple tempos.
 experiment:
   dt: 0.05
   duration: 10.0
   mode: sensorimotor
   random_phase: true
   zero_mean_beat: true
-  n_training_rounds: 10000
-  name: rev_envelope_exp
-  random_seed: 746              # match the final published runs (only auditory_envelope differs)
+  n_training_rounds: 1000
+  name: rev_step3_multitempo_gate
+  random_seed: 746
   tempo:
-    mode: single
+    mode: range
     value: 0.5
     min: 0.4
     max: 0.8
-    step: 0.1
+    step: 0.1                     # -> [0.4, 0.5, 0.6, 0.7, 0.8]
 
   auditory_envelope:
-    shape: exp                    # sharp attack, exponential decay
-    width: 0.15                   # tau in seconds (0.3 of the 0.5 s period)
+    shape: pulse
+    width: 0.1
     amplitude_jitter: 0.0
     width_jitter: 0.0
 
@@ -35,7 +37,7 @@ network:
   alpha_H: 0.1
   alpha_x: 1
   associative_size: 64
-  higher_size: 0
+  higher_size: 0                  # single layer first; if it fails, enable hierarchy
   inference_learning_rate_H: 0.049706088801492805
   inference_learning_rate_x: 0.26109253426023427
   n_inference_steps: 5
@@ -50,6 +52,6 @@ saving:
 
 testing:
   continuation: false
-  n_inference_rounds: 50
+  n_inference_rounds: 10          # lighter eval during the gate (5 tempos x 10); per-tempo eval done afterward
   prediction_timing: after
   test_duration: 20.0

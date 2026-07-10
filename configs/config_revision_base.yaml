@@ -50,8 +50,9 @@ network:
   weight_learning_rate_x: 0.49832988896925373
 
 saving:
-  base_dir: experiments/paper_revision
+  base_dir: experiments/revision2
   log_every: 2000
+  save_every: 2000          # regular checkpoints for the step/tempo viewer
 
 testing:
   continuation: false
